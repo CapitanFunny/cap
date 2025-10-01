@@ -3996,9 +3996,6 @@ const embed = new EmbedBuilder()
         }
 
         const sayContent = interaction.options.getString('message');
-        if (!sayContent) {
-          return await interaction.reply({ content: '<:a_2:1415171126560165928> Please provide content to say.', flags: 64 });
-        }
         
         await interaction.reply({ content: 'Message sent!', flags: 64 });
         await interaction.channel.send(sayContent);
