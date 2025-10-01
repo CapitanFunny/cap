@@ -3736,8 +3736,7 @@ case 'remindlist': {
     try {
       await saveCasesToFile(interaction.guildId, []);           
       await saveServerPrefixes(interaction.guildId, null);      
-      await saveAutomodConfig(interaction.guildId, {});         
-      await serverLoggingChannels(interaction.guildId, {});       
+      await saveAutomodConfig(interaction.guildId, {});                
       await saveImmunes(interaction.guildId, { roles: {}, users: {} }); 
       const channels = interaction.guild.channels.cache.filter(c => c.isTextBased());
       for (const channel of channels.values()) {
