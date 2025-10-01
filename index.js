@@ -4007,7 +4007,7 @@ const embed = new EmbedBuilder()
 
       case 'ping': {
   try {
-    const sent = await interaction.reply({ content: 'Pong! Calculating raw response time...', fetchReply: true });
+    const sent = await interaction.reply({ content: 'Pong! Calculating raw response time...', withResponse: true });
     const rawLatency = sent.createdTimestamp - interaction.createdTimestamp;
     await interaction.editReply(`Pong!\n• Raw response time: **${rawLatency}ms**\n• Measuring edit roundtrip...`);
 
