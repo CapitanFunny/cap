@@ -3990,17 +3990,27 @@ const embed = new EmbedBuilder()
         break;
       }
 
-      case 'say': {
-        if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-          return await interaction.reply({ content: '<:a_2:1415171126560165928> You need the "Manage Messages" permission to use this command.', flags: 64 });
-        }
+      ccase 'say': {
+  if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+    return await interaction.reply({ content: '<:a_2:1415171126560165928> You need the "Manage Messages" permission to use this command.', flags:64 });
+  }
+  const raw = interaction.content;
+  const sayContent = raw.slice(prefix.length + commandName.length);
 
-        const sayContent = interaction.options.getString('message');
-        
-        await interaction.reply({ content: 'Message sent!', flags: 64 });
-        await interaction.channel.send(sayContent);
-        break;
-      }
+  if (!sayContent || sayContent.length === 0) {
+    return await interaction.reply({ content: '<:a_2:1415171126560165928> Please provide content to say.', flags:64 });
+  }
+
+  await message.channel.send(sayContent);
+
+  try {
+    await message.delete();
+  } catch (error) {
+    console.error('Failed to delete say command message:', error);
+  }
+  break;
+}
+
 
       case 'ping': {
   try {
