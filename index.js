@@ -3990,7 +3990,7 @@ const embed = new EmbedBuilder()
         break;
       }
 
-      ccase 'say': {
+      case 'say': {
   if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
     return await interaction.reply({ content: '<:a_2:1415171126560165928> You need the "Manage Messages" permission to use this command.', flags:64 });
   }
