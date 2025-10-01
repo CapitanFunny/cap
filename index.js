@@ -6107,10 +6107,7 @@ new SlashCommandBuilder()
     option.setName('user')
       .setDescription('User to toggle immunity for')
       .setRequired(true))
-  .addRoleOption(option =>
-    option.setName('role')
-      .setDescription('Role to toggle immunity for')
-      .setRequired(false))
+
   .addStringOption(option =>
     option.setName('punishment')
       .setDescription('Punishment to toggle immunity for')
@@ -6119,8 +6116,11 @@ new SlashCommandBuilder()
         { name: 'Note', value: 'note' },
         { name: 'Warn', value: 'warn' },
         { name: 'Infract', value: 'infract' },
-        { name: 'Mute', value: 'mute' }
-      )),
+        { name: 'Mute', value: 'mute' }))
+  .addRoleOption(option =>
+    option.setName('role')
+      .setDescription('Role to toggle immunity for')
+      .setRequired(false)),
 
 new SlashCommandBuilder()
   .setName('immunes')
