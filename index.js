@@ -6215,23 +6215,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 **After *a brief debug testing session*, no errors have been found.**
 
 ## Updates;
-- real and noticable optimizations
-- addition to commands;
-serverinfo; si
-memberinfo; mi
-avatar; av
-remindme; remind
-- new commands;
-automod
-immune
-remindme
-remind
-reminddel
-remindchange
-remindlist
-schedule
-scheduledel
-schedulelist
+- bot is back to OCI; Oracle Cloud Infrastructure
 
 If you find an error, please open a <#1376450603068166165> ticket.
 
