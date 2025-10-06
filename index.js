@@ -3264,12 +3264,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     const verifiedRoleId = interaction.customId.split('_')[1];
     if (!verifiedRoleId) {
-      return await interaction.editReply('<:a_1:1415171153156374589> Error code '001002'. Please contact a server admin.');
+      return await interaction.editReply('<:a_1:1415171153156374589> Error code \`001002\`. Please contact a server admin.');
     }
 
     const role = interaction.guild.roles.cache.get(verifiedRoleId);
     if (!role) {
-      return await interaction.editReply('<:a_2:1415171126560165928> Error code '001003'. Please contact a server admin.');
+      return await interaction.editReply('<:a_2:1415171126560165928> Error code \`001003\`. Please contact a server admin.');
     }
 
     try {
@@ -3279,7 +3279,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.member.roles.add(role);
     } catch (err) {
       console.error('Failed to add verified role:', err);
-      return await interaction.editReply('<:a_1:1415171153156374589> Error code `001001`. Please contact a server admin.');
+      return await interaction.editReply('<:a_1:1415171153156374589> Error code \`001001\`. Please contact a server admin.');
     }
 
     try {
