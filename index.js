@@ -6221,7 +6221,10 @@ client.once(Events.ClientReady, async (readyClient) => {
 **After *a brief debug testing session*, no errors have been found.**
 
 ## Updates;
-- bot is back to OCI; Oracle Cloud Infrastructure
+- n/a
+
+## QOL changes;
+- soon, error codes will be implemented for easier and faster debugging.
 
 If you find an error, please open a <#1376450603068166165> ticket.
 
