@@ -1482,10 +1482,10 @@ case 'role': {
   const botHighest = botMember.roles.highest;
 
   if (roleArg.position >= executorHighest.position) {
-    return await message.reply('<:a_2:1415171126560165928> Error code \`001001\`. Please contact a server admin or \`/support\`.');
+    return await message.reply('<:a_2:1415171126560165928> You cannot manage a role equal or higher than your highest role.');
   }
   if (roleArg.position >= botHighest.position) {
-    return await message.reply('<:a_2:1415171126560165928> Error code \`001001\`. Please contact a server admin or \`/support\`.');
+    return await message.reply('<:a_2:1415171126560165928> I cannot manage that role because it is equal or higher than my highest role.');
   }
 
   try {
@@ -1504,7 +1504,7 @@ case 'role': {
     }
   } catch (err) {
     console.error('Role command error:', err);
-    await message.reply('<:a_2:1415171126560165928> Error code \`001001\`. Please contact a server admin or \`/support\`.');
+    await message.reply('<:a_2:1415171126560165928> Failed to modify role. Check my permissions and role hierarchy.');
   }
   break;
 }
@@ -1602,7 +1602,7 @@ case 'debug': {
         await message.reply(`<a:y1:1415173658237866025> AutoMod rule "${ruleName}" created with ID: \`${rule.id}\`\nUse Discord's AutoMod settings to configure triggers, or use \`!automod assign ${rule.id} <punishment>\` to set a punishment.`);
       } catch (err) {
         console.error('Failed to create automod rule:', err);
-        return await message.reply('<:a_2:1415171126560165928> Error code \`020202\`. Please contact a server admin or \`/support\`.');
+        return await message.reply('<:a_2:1415171126560165928> Failed to create automod rule. Check my permissions.');
       }
       break;
     }
@@ -1807,7 +1807,7 @@ case 'editcase': {
     await message.reply(`<a:y1:1415173658237866025> Case \`${caseId}\` updated (${field}).`);
   } catch (err) {
     console.error('editcase error:', err);
-    await message.reply('<:a_2:1415171126560165928> Error code \`001004\`. Please contact a server admin or \`/support\`.');
+    await message.reply('<:a_2:1415171126560165928> Failed to edit the case.');
   }
   break;
 }
@@ -2024,7 +2024,7 @@ case 'nickname': {
     await message.reply(`<a:y1:1415173658237866025> Nickname for **${targetMember.user.tag}** has been changed to **${newNickname}**.`);
   } catch (err) {
     console.error("Nickname change error:", err);
-    return await message.reply('<:a_2:1415171126560165928> Error code \`001001\`. Please contact a server admin or \`/support\`.');
+    return await message.reply('<:a_2:1415171126560165928> Failed to change nickname. Check role hierarchy and permissions.');
   }
   break;
 }
@@ -2080,7 +2080,7 @@ case 'verification': {
     await message.reply('<a:y1:1415173658237866025> Verification message sent!');
   } catch (err) {
     console.error('Failed to send verification message (prefix):', err);
-    await message.reply('<:a_2:1415171126560165928> Error code \`020202\`. Please contact a server admin or \`/support\`.');
+    await message.reply('<:a_2:1415171126560165928> Failed to send the verification message to that channel.');
   }
 
   break;
@@ -2299,7 +2299,7 @@ if (caseData.type === 'ban') {
     }
   } catch (err) {
     console.error('Purge error:', err);
-    return await message.reply('<:a_2:1415171126560165928> Error code \`002001\`. An error occurred while trying to purge messages. Messages older than 14 days cannot be deleted in bulk.');
+    return await message.reply('<:a_2:1415171126560165928> An error occurred while trying to purge messages. Messages older than 14 days cannot be deleted in bulk.');
   }
   break;
 }
@@ -2401,7 +2401,7 @@ case 'warn': {
   if (!warnTarget) return await message.reply('<:a_2:1415171126560165928> Please provide a valid user (mention, ID, or username) to warn.');
   const warnMember = guild.members.cache.get(warnTarget.id) || await guild.members.fetch(warnTarget.id).catch(()=>null);
   if (warnMember && isMemberImmune(guild, warnMember, 'warn')) {
-    return await message.reply('<:a_2:1415171126560165928> User is immune to punishment via role or invdividual immunity.');
+    return await message.reply('<:a_2:1415171126560165928> That user (or one of their roles) is immune to `warn`.');
   }
 
   const warnReason = args.slice(1).join(' ') || null;
@@ -2434,7 +2434,7 @@ case 'infract': {
   if (!infractTarget) return await message.reply('<:a_2:1415171126560165928> Please provide a valid user (mention, ID, or username) to infract.');
   const infractMember = guild.members.cache.get(infractTarget.id) || await guild.members.fetch(infractTarget.id).catch(()=>null);
   if (infractMember && isMemberImmune(guild, infractMember, 'infract')) {
-    return await message.reply('<:a_2:1415171126560165928> User is immune to punishment via role or invdividual immunity.');
+    return await message.reply('<:a_2:1415171126560165928> That user (or one of their roles) is immune to `infract`.');
   }
 
   const infractReason = args.slice(1).join(' ') || null;
@@ -2467,7 +2467,7 @@ case 'note': {
   if (!noteTarget) return await message.reply('<:a_2:1415171126560165928> Please provide a valid user (mention, ID, or username) to add a note for.');
   const noteMember = guild.members.cache.get(noteTarget.id) || await guild.members.fetch(noteTarget.id).catch(()=>null);
   if (noteMember && isMemberImmune(guild, noteMember, 'note')) {
-    return await message.reply('<:a_2:1415171126560165928> User is immune to punishment via role or invdividual immunity.');
+    return await message.reply('<:a_2:1415171126560165928> That user (or one of their roles) is immune to `note`.');
   }
 
   const noteReason = args.slice(1).join(' ') || null;
@@ -2522,7 +2522,7 @@ case 'mute': {
   if (!muteTarget) return await message.reply('<:a_2:1415171126560165928> User not found in this server.');
 
   if (isMemberImmune(guild, muteTarget, 'mute')) {
-    return await message.reply('<:a_2:1415171126560165928> User is immune to punishment via role or invdividual immunity.');
+    return await message.reply('<:a_2:1415171126560165928> That user (or one of their roles) is immune to `mute`.');
   }
 
   const muteDuration = parseInt(args[1]);
@@ -2545,7 +2545,7 @@ case 'mute': {
   }
 
   if (!botMember.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-    return await message.reply('<:a_2:1415171126560165928> Error code \`020202\`. I need the "Timeout Members" permission to mute users.');
+    return await message.reply('<:a_2:1415171126560165928> I need the "Timeout Members" permission to mute users.');
   }
 
   try {
@@ -2553,7 +2553,7 @@ case 'mute': {
   } catch (error) {
     console.error('Mute error:', error);
     if (error.code === 50013) {
-      return await message.reply('<:a_2:1415171126560165928> Error code \`001001\`. Please contact a server admin or \`/support\`.');
+      return await message.reply('<:a_2:1415171126560165928> I don\'t have permission to timeout this user. Check my role position and permissions.');
     }
     return await message.reply('<:a_2:1415171126560165928> Failed to mute the user due to an unexpected error.');
   }
@@ -2585,7 +2585,7 @@ case 'mute': {
 if (!kickTargetUser) return await message.reply('<:a_2:1415171126560165928> Please provide a valid user (mention, ID, or username) to kick.');
 
 const kickTarget = guild.members.cache.get(kickTargetUser.id);
-if (!kickTarget) return await message.reply('<:a_2:1415171126560165928> Error code \`001003\`. User not found in this server.');
+if (!kickTarget) return await message.reply('<:a_2:1415171126560165928> User not found in this server.');
 
         const kickReason = args.slice(1).join(' ') || null;
         const kickCaseId = generateCaseId();
@@ -2930,7 +2930,7 @@ case 'commands': {
 }
         
         case 'support':
-        const supportReply = await message.reply('***Support Server for cap***\n\n> https://discord.gg/PfCC7Y2tXH\n\n***Website***\n\n> <https://sites.google.com/view/capitanfunny/discord-bot-developer?authuser=0>');
+        const supportReply = await message.reply('***Support Server for cap***\n\n> https://discord.gg/PfCC7Y2tXH\n\n***Website***\n\n> https://sites.google.com/view/capitanfunny/discord-bot-developer?authuser=0');
         break;
 
       case 'appeal':
@@ -3264,12 +3264,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     const verifiedRoleId = interaction.customId.split('_')[1];
     if (!verifiedRoleId) {
-      return await interaction.editReply('<:a_1:1415171153156374589> Error code \`001002\`. Please contact a server admin.');
+      return await interaction.editReply('<:a_1:1415171153156374589> Verification role ID is missing from the button. Please contact a server admin.');
     }
 
     const role = interaction.guild.roles.cache.get(verifiedRoleId);
     if (!role) {
-      return await interaction.editReply('<:a_2:1415171126560165928> Error code \`001003\`. Please contact a server admin.');
+      return await interaction.editReply('<:a_2:1415171126560165928> The configured verification role no longer exists.');
     }
 
     try {
@@ -3279,7 +3279,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.member.roles.add(role);
     } catch (err) {
       console.error('Failed to add verified role:', err);
-      return await interaction.editReply('<:a_1:1415171153156374589> Error code \`001001\`. Please contact a server admin.');
+      return await interaction.editReply('<:a_1:1415171153156374589> Failed to add the verified role. Check my permissions and role hierarchy.');
     }
 
     try {
@@ -4030,7 +4030,7 @@ const embed = new EmbedBuilder()
     );
   } catch (err) {
     console.error('Ping interaction failed:', err);
-    await interaction.reply({ content: '<:a_2:1415171126560165928> Error code \`010101\`. Please contact a server admin.', flags: 64 });
+    await interaction.reply({ content: '<:a_2:1415171126560165928> Ping failed.', flags: 64 });
   }
   break;
 }
@@ -4106,7 +4106,7 @@ const embed = new EmbedBuilder()
     await interaction.reply({ embeds: [statusEmbed], flags: 64 });
   } catch (err) {
     console.error('Status interaction failed:', err);
-    await interaction.reply({ content: '<:a_2:1415171126560165928> Error code \`010101\`. Please contact a server admin.', flags: 64 });
+    await interaction.reply({ content: '<:a_2:1415171126560165928> Failed to gather status information.', flags: 64 });
   }
   break;
 }
@@ -4802,7 +4802,7 @@ case 'mute': {
 
       case 'support': {
         await interaction.reply({ 
-          content: '***Support Server for cap***\n\n> https://discord.gg/PfCC7Y2tXH\n\n***Website***\n\n> <https://sites.google.com/view/capitanfunny/discord-bot-developer?authuser=0>',
+          content: '***Support Server for cap***\n\n> https://discord.gg/PfCC7Y2tXH\n\n***Website***\n\n> https://sites.google.com/view/capitanfunny/discord-bot-developer?authuser=0',
           flags: 64 
         });
         break;
