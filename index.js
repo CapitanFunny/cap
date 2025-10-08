@@ -377,7 +377,7 @@ const commandCooldowns = new Map();
 const aboutInfo = {
   title: "cap",
   description: "A comprehensive multi-purpose moderation bot",
-  version: "1.2.1",
+  version: "1.2.5",
   author: "<@1005866530350833794>",
   features: [
     "Case appeal, lookup, editing, and voiding system",
