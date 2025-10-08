@@ -6221,7 +6221,9 @@ client.once(Events.ClientReady, async (readyClient) => {
 **After *a brief debug testing session*, no errors have been found.**
 
 ## Updates;
-- n/a
+- **VERY LARGE**
+The bot now runs on a ***server that I provided myself. (capitanfunny)***
+This should increase overall preformance, and allow for quicker access to the server directly.
 
 ## QOL changes;
 - soon, error codes will be implemented for easier and faster debugging.
