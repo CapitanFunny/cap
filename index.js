@@ -3135,23 +3135,21 @@ case 'setproof': {
 // ============================================================================
 // Slash Command Handler 6/10
 // ============================================================================
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (interaction.replied || interaction.deferred) return;
-  client.on(Events.AutoModerationActionExecution, async (action) => {
-  const { guild, user, ruleTriggerType, action: actionData, matchedKeyword, matchedContent, channel, ruleId } = action;
-  
-  const guildConfig = serverAutomodConfig.get(guild.id) || { rules: {} };
-  const ruleConfig = guildConfig.rules[ruleId];
-  
-  if (!ruleConfig || !ruleConfig.punishment || ruleConfig.punishment === 'none') {
-    return;
-  }
-
-  const punishment = ruleConfig.punishment;
-  const reason = `AutoMod: Rule "${actionData.autoModerationRuleName}" triggered (matched: "${matchedKeyword || 'content filter'}")`;
-  const caseId = generateCaseId();
-
+client.on(Events.AutoModerationActionExecution, async (action) => {
   try {
+    const { guild, user, ruleTriggerType, action: actionData, matchedKeyword, matchedContent, channel, ruleId } = action;
+
+    const guildConfig = serverAutomodConfig.get(guild.id) || { rules: {} };
+    const ruleConfig = guildConfig.rules[ruleId];
+
+    if (!ruleConfig || !ruleConfig.punishment || ruleConfig.punishment === 'none') {
+      return;
+    }
+
+    const punishment = ruleConfig.punishment;
+    const reason = `AutoMod: Rule "${actionData.autoModerationRuleName}" triggered (matched: "${matchedKeyword || 'content filter'}")`;
+    const caseId = generateCaseId();
+
     switch (punishment) {
       case 'note': {
         moderationCases.set(caseId, {
@@ -3164,7 +3162,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           voided: false,
           guildId: guild.id
         });
-        
         await saveCasesToFile(guild.id);
         await logModerationAction(guild, 'note', client.user, user, reason, `AutoMod Rule: ${ruleId}`, caseId);
         break;
@@ -3181,7 +3178,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           voided: false,
           guildId: guild.id
         });
-        
         await saveCasesToFile(guild.id);
         await logModerationAction(guild, 'warn', client.user, user, reason, `AutoMod Rule: ${ruleId}`, caseId);
         break;
@@ -3191,7 +3187,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const member = guild.members.cache.get(user.id);
         if (member && member.kickable) {
           await member.kick(reason);
-          
           moderationCases.set(caseId, {
             type: 'kick',
             target: user.id,
@@ -3202,7 +3197,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             voided: false,
             guildId: guild.id
           });
-          
           await saveCasesToFile(guild.id);
           await logModerationAction(guild, 'kick', client.user, user, reason, `AutoMod Rule: ${ruleId}`, caseId);
         }
@@ -3213,7 +3207,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const member = guild.members.cache.get(user.id);
         if (member && member.bannable) {
           await guild.members.ban(user.id, { reason: reason });
-          
           moderationCases.set(caseId, {
             type: 'ban',
             target: user.id,
@@ -3224,13 +3217,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
             voided: false,
             guildId: guild.id
           });
-          
           await saveCasesToFile(guild.id);
           await logModerationAction(guild, 'ban', client.user, user, reason, `AutoMod Rule: ${ruleId}`, caseId);
         }
         break;
       }
     }
+
     const allLogsChannelId = getServerLoggingChannel(guild.id, 'alllogs');
     if (allLogsChannelId) {
       const logChannel = guild.channels.cache.get(allLogsChannelId);
@@ -3247,7 +3240,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             { name: 'Case ID', value: caseId, inline: true }
           )
           .setTimestamp();
-        
         await logChannel.send({ embeds: [embed] });
       }
     }
@@ -3255,6 +3247,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     console.error('Failed to execute automod punishment:', err);
   }
 });
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.replied || interaction.deferred) return;
   if (interaction.isButton() && interaction.customId.startsWith('verify_')) {
     await interaction.deferReply({ flags: 64 });
     const accountAgeMs = Date.now() - interaction.user.createdAt.getTime();
