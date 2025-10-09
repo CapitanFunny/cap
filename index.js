@@ -3365,8 +3365,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         break;
       }
 
-        case 'automod': {
-  if (!interaction.memberPermissions || !interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
+
+      case 'automod': {
+
+  const member = interaction.member;
+  if (!member || !member.permissions || !member.permissions.has(PermissionsBitField.Flags.Administrator)) {
     await interaction.reply({ content: '<:a_2:1415171126560165928> You need the "Administrator" permission to use this command.', flags: 64 });
     break;
   }
@@ -3378,8 +3381,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   const guildId = guild.id;
-  const sub = interaction.options.getSubcommand();
+
+  let sub;
+  try {
+    sub = interaction.options.getSubcommand();
+  } catch (e) {
+    await interaction.reply({ content: '<:a_2:1415171126560165928> Please provide a valid subcommand (create/delete/assign/view).', flags: 64 });
+    break;
+  }
+
   const guildConfig = serverAutomodConfig.get(guildId) || { rules: {} };
+  if (!guildConfig.rules) guildConfig.rules = {};
 
   try {
     switch (sub) {
@@ -3389,7 +3401,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.reply({ content: '<:a_2:1415171126560165928> Please provide a rule name.', flags: 64 });
           break;
         }
-
         const rule = await guild.autoModerationRules.create({
           name,
           eventType: 1,
@@ -3400,7 +3411,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
             metadata: { customMessage: 'Your message was blocked by AutoMod.' }
           }],
           enabled: true
+        }).catch(err => {
+          console.error('AutoMod create error:', err);
+          return null;
         });
+
+        if (!rule) {
+          await interaction.reply({ content: '<:a_2:1415171126560165928> Failed to create AutoMod rule. Check my permissions and guild settings.', flags: 64 });
+          break;
+        }
 
         guildConfig.rules[rule.id] = {
           id: rule.id,
@@ -3432,9 +3451,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
           break;
         }
 
-        await existingRule.delete().catch(err => {
+        try {
+          if (existingRule && typeof existingRule.delete === 'function') {
+            await existingRule.delete();
+          }
+        } catch (err) {
           console.error('Failed deleting automod rule:', err);
-        });
+        }
 
         if (guildConfig.rules[ruleId]) {
           delete guildConfig.rules[ruleId];
@@ -3461,15 +3484,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
           break;
         }
 
-        if (!['none','note','warn','kick','ban'].includes(punishment)) {
-          await interaction.reply({ content: '<:a_2:1415171126560165928> Punishment must be one of: none, note, warn, kick, ban.', flags: 64 });
+        const allowed = ['none','note','warn','kick','ban'];
+        if (!allowed.includes(punishment)) {
+          await interaction.reply({ content: `<:a_2:1415171126560165928> Punishment must be one of: ${allowed.join(', ')}.`, flags: 64 });
           break;
         }
 
         if (!guildConfig.rules[ruleId]) {
           guildConfig.rules[ruleId] = {
             id: ruleId,
-            name: existingRule.name,
+            name: existingRule.name || 'Unnamed Rule',
             punishment: 'none',
             createdBy: interaction.user.id,
             createdAt: new Date().toISOString()
@@ -3482,9 +3506,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         serverAutomodConfig.set(guildId, guildConfig);
         await saveAutomodConfig(guildId);
 
-        await interaction.reply({ content: `<a:y1:1415173658237866025> Punishment **${punishment}** assigned to rule **${existingRule.name}**.`, flags: 64 });
+        await interaction.reply({ content: `<a:y1:1415173658237866025> Punishment **${punishment}** assigned to rule **${existingRule.name || ruleId}**.`, flags: 64 });
         break;
       }
+
       case 'view': {
         const rules = await guild.autoModerationRules.fetch().catch(() => null);
         if (!rules || rules.size === 0) {
@@ -3499,7 +3524,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setTimestamp();
 
         for (const rule of rules.values()) {
-          const config = guildConfig.rules[rule.id];
+          const config = (guildConfig.rules || {})[rule.id];
           const punishment = config?.punishment || 'none';
           const assignedBy = config?.assignedBy ? `<@${config.assignedBy}>` : 'Not set';
 
@@ -3533,6 +3558,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   break;
 }
+
 
       case 'role': {
         if (!guild) {
@@ -3729,61 +3755,6 @@ case 'remindlist': {
         await interaction.reply({ embeds: [embed], flags: 64 });
         break;
       }
-
-        case 'reset': {
-  if (interaction.guild.ownerId !== interaction.user.id) {
-    return await interaction.reply({
-      content: '<:a_2:1415171126560165928> Only the **server owner** can reset this bot’s data.',
-      flags: 64
-    });
-  }
-
-  await interaction.reply({
-    content: '⚠️ **Are you sure you want to reset ALL bot data for this server?**\n\n' +
-             'This includes logging channels, reminders, schedules, cases, prefix, automod configs, and bot messages.\n\n' +
-             'Type **`reset authorize`** in this channel within **30 seconds** to confirm.',
-    flags: 64
-  });
-  const filter = m => m.author.id === interaction.user.id && m.content.trim().toLowerCase() === 'reset authorize';
-  const collector = interaction.channel.createMessageCollector({ filter, max: 1, time: 30_000 });
-
-  collector.on('collect', async () => {
-    try {
-      await saveCasesToFile(interaction.guildId, []);           
-      await saveServerPrefixes(interaction.guildId, null);      
-      await saveAutomodConfig(interaction.guildId, {});                
-      await saveImmunes(interaction.guildId, { roles: {}, users: {} }); 
-      const channels = interaction.guild.channels.cache.filter(c => c.isTextBased());
-      for (const channel of channels.values()) {
-        try {
-          const msgs = await channel.messages.fetch({ limit: 100 });
-          const botMsgs = msgs.filter(m => m.author.id === client.user.id);
-          if (botMsgs.size > 0) await channel.bulkDelete(botMsgs, true).catch(() => null);
-        } catch (err) {
-        }
-      }
-
-      await interaction.followUp({
-        content: `<a:y1:1415173658237866025> Reset completed. All bot data for **${interaction.guild.name}** has been cleared.`,
-        flags: 64
-      });
-    } catch (err) {
-      console.error('Reset error:', err);
-      await interaction.followUp({
-        content: '<:a_2:1415171126560165928> Something went wrong while resetting this server’s data.',
-        flags: 64
-      });
-    }
-  });
-
-  collector.on('end', collected => {
-    if (collected.size === 0) {
-      interaction.followUp({ content: '❌ Reset cancelled (no confirmation received).', flags: 64 });
-    }
-  });
-
-  break;
-}
 
 
       case 'editcase': {
@@ -5901,13 +5872,6 @@ new SlashCommandBuilder()
       option.setName('proof')
         .setDescription('Proof/evidence for the kick')
         .setRequired(false)),
-
-  new SlashCommandBuilder()
-  .setName('reset')
-  .setDescription('Reset ALL bot data/settings for this server (owner only).')
-  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-  .setDMPermission(false),
-
 
   new SlashCommandBuilder()
   .setName('automod')
