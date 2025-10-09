@@ -3250,6 +3250,7 @@ client.on(Events.AutoModerationActionExecution, async (action) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.replied || interaction.deferred) return;
+  if (!interaction.isChatInputCommand()) return;
   if (interaction.isButton() && interaction.customId.startsWith('verify_')) {
     await interaction.deferReply({ flags: 64 });
     const accountAgeMs = Date.now() - interaction.user.createdAt.getTime();
@@ -3365,150 +3366,169 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
         case 'automod': {
-  if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    return await interaction.reply({ content: '<:a_2:1415171126560165928> You need Administrator permission.', flags: 64 });
+  if (!interaction.memberPermissions || !interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator)) {
+    await interaction.reply({ content: '<:a_2:1415171126560165928> You need the "Administrator" permission to use this command.', flags: 64 });
+    break;
   }
 
-  const subcommand = interaction.options.getSubcommand();
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.reply({ content: '<:a_2:1415171126560165928> This command must be used in a server.', flags: 64 });
+    break;
+  }
+
+  const guildId = guild.id;
+  const sub = interaction.options.getSubcommand();
   const guildConfig = serverAutomodConfig.get(guildId) || { rules: {} };
 
-  switch (subcommand) {
-    case 'create': {
-      const ruleName = interaction.options.getString('name');
-      
-      try {
-        const rule = await interaction.guild.autoModerationRules.create({
-          name: ruleName,
+  try {
+    switch (sub) {
+      case 'create': {
+        const name = interaction.options.getString('name');
+        if (!name) {
+          await interaction.reply({ content: '<:a_2:1415171126560165928> Please provide a rule name.', flags: 64 });
+          break;
+        }
+
+        const rule = await guild.autoModerationRules.create({
+          name,
           eventType: 1,
           triggerType: 1,
-          triggerMetadata: {
-            keywordFilter: ['default_blocked_word'],
-          },
+          triggerMetadata: { keywordFilter: ['example_block'] },
           actions: [{
             type: 1,
-            metadata: {
-              customMessage: 'Your message was blocked by AutoMod'
-            }
+            metadata: { customMessage: 'Your message was blocked by AutoMod.' }
           }],
-          enabled: true,
-          exemptRoles: [],
-          exemptChannels: []
+          enabled: true
         });
 
         guildConfig.rules[rule.id] = {
           id: rule.id,
-          name: ruleName,
+          name,
           punishment: 'none',
           createdBy: interaction.user.id,
           createdAt: new Date().toISOString()
         };
-        
         serverAutomodConfig.set(guildId, guildConfig);
         await saveAutomodConfig(guildId);
 
-        await interaction.reply({ 
-          content: `<a:y1:1415173658237866025> AutoMod rule "${ruleName}" created with ID: \`${rule.id}\`\nConfigure triggers in Server Settings > AutoMod.`, 
-          flags: 64 
+        await interaction.reply({
+          content: `<a:y1:1415173658237866025> AutoMod rule **${name}** created with ID \`${rule.id}\`. Use \`/automod assign rule_id:${rule.id} punishment:<type>\` to assign a punishment.`,
+          flags: 64
         });
-      } catch (err) {
-        console.error('Failed to create automod rule:', err);
-        await interaction.reply({ content: '<:a_2:1415171126560165928> Failed to create rule.', flags: 64 });
+        break;
       }
-      break;
-    }
 
-    case 'delete': {
-      const ruleId = interaction.options.getString('rule_id');
-      
-      try {
-        const rule = await interaction.guild.autoModerationRules.fetch(ruleId).catch(() => null);
-        if (!rule) {
-          return await interaction.reply({ content: '<:a_2:1415171126560165928> Rule not found.', flags: 64 });
+      case 'delete': {
+        const ruleId = interaction.options.getString('rule_id');
+        if (!ruleId) {
+          await interaction.reply({ content: '<:a_2:1415171126560165928> Please provide a rule ID to delete.', flags: 64 });
+          break;
         }
 
-        await rule.delete();
-        
+        const existingRule = await guild.autoModerationRules.fetch(ruleId).catch(() => null);
+        if (!existingRule) {
+          await interaction.reply({ content: '<:a_2:1415171126560165928> Rule not found.', flags: 64 });
+          break;
+        }
+
+        await existingRule.delete().catch(err => {
+          console.error('Failed deleting automod rule:', err);
+        });
+
         if (guildConfig.rules[ruleId]) {
           delete guildConfig.rules[ruleId];
           serverAutomodConfig.set(guildId, guildConfig);
           await saveAutomodConfig(guildId);
         }
 
-        await interaction.reply({ content: `<a:y1:1415173658237866025> AutoMod rule deleted.`, flags: 64 });
-      } catch (err) {
-        await interaction.reply({ content: '<:a_2:1415171126560165928> Failed to delete rule.', flags: 64 });
+        await interaction.reply({ content: `<a:y1:1415173658237866025> AutoMod rule deleted successfully.`, flags: 64 });
+        break;
       }
-      break;
-    }
 
-    case 'assign': {
-      const ruleId = interaction.options.getString('rule_id');
-      const punishment = interaction.options.getString('punishment');
-      
-      try {
-        const rule = await interaction.guild.autoModerationRules.fetch(ruleId).catch(() => null);
-        if (!rule) {
-          return await interaction.reply({ content: '<:a_2:1415171126560165928> Rule not found.', flags: 64 });
+      case 'assign': {
+        const ruleId = interaction.options.getString('rule_id');
+        const punishment = interaction.options.getString('punishment');
+
+        if (!ruleId || !punishment) {
+          await interaction.reply({ content: '<:a_2:1415171126560165928> Usage: /automod assign rule_id:<id> punishment:<none|note|warn|kick|ban>', flags: 64 });
+          break;
+        }
+
+        const existingRule = await guild.autoModerationRules.fetch(ruleId).catch(() => null);
+        if (!existingRule) {
+          await interaction.reply({ content: '<:a_2:1415171126560165928> Rule not found.', flags: 64 });
+          break;
+        }
+
+        if (!['none','note','warn','kick','ban'].includes(punishment)) {
+          await interaction.reply({ content: '<:a_2:1415171126560165928> Punishment must be one of: none, note, warn, kick, ban.', flags: 64 });
+          break;
         }
 
         if (!guildConfig.rules[ruleId]) {
           guildConfig.rules[ruleId] = {
             id: ruleId,
-            name: rule.name,
+            name: existingRule.name,
             punishment: 'none',
             createdBy: interaction.user.id,
             createdAt: new Date().toISOString()
           };
         }
-        
+
         guildConfig.rules[ruleId].punishment = punishment;
         guildConfig.rules[ruleId].assignedBy = interaction.user.id;
         guildConfig.rules[ruleId].assignedAt = new Date().toISOString();
-        
         serverAutomodConfig.set(guildId, guildConfig);
         await saveAutomodConfig(guildId);
 
-        await interaction.reply({ 
-          content: `<a:y1:1415173658237866025> Punishment "${punishment}" assigned to "${rule.name}".`, 
-          flags: 64 
-        });
-      } catch (err) {
-        await interaction.reply({ content: '<:a_2:1415171126560165928> Failed to assign punishment.', flags: 64 });
+        await interaction.reply({ content: `<a:y1:1415173658237866025> Punishment **${punishment}** assigned to rule **${existingRule.name}**.`, flags: 64 });
+        break;
       }
-      break;
-    }
-
-    case 'view': {
-      try {
-        const rules = await interaction.guild.autoModerationRules.fetch();
-        
-        if (rules.size === 0) {
-          return await interaction.reply({ content: 'No AutoMod rules configured.', flags: 64 });
+      case 'view': {
+        const rules = await guild.autoModerationRules.fetch().catch(() => null);
+        if (!rules || rules.size === 0) {
+          await interaction.reply({ content: 'No AutoMod rules configured for this server.', flags: 64 });
+          break;
         }
 
         const embed = new EmbedBuilder()
           .setColor(0xFFFFFF)
           .setTitle('🤖 AutoMod Configuration')
-          .setDescription('Current rules and punishments:')
+          .setDescription('Current AutoMod rules and their punishments:')
           .setTimestamp();
 
         for (const rule of rules.values()) {
           const config = guildConfig.rules[rule.id];
           const punishment = config?.punishment || 'none';
           const assignedBy = config?.assignedBy ? `<@${config.assignedBy}>` : 'Not set';
-          
+
+          const triggerInfo = [];
+          if (rule.triggerType === 1) triggerInfo.push('Keyword Filter');
+          if (rule.triggerType === 3) triggerInfo.push('Spam Detection');
+          if (rule.triggerType === 4) triggerInfo.push('Keyword Preset');
+          if (rule.triggerType === 5) triggerInfo.push('Mention Spam');
+
           embed.addFields({
             name: `${rule.enabled ? '✅' : '❌'} ${rule.name}`,
-            value: `**ID:** \`${rule.id}\`\n**Punishment:** ${punishment}\n**Assigned By:** ${assignedBy}`,
+            value: `**ID:** \`${rule.id}\`\n**Type:** ${triggerInfo.join(', ') || 'Unknown'}\n**Punishment:** ${punishment}\n**Assigned By:** ${assignedBy}`,
             inline: false
           });
         }
 
         await interaction.reply({ embeds: [embed], flags: 64 });
-      } catch (err) {
-        await interaction.reply({ content: '<:a_2:1415171126560165928> Failed to fetch rules.', flags: 64 });
+        break;
       }
-      break;
+
+      default: {
+        await interaction.reply({ content: '<:a_2:1415171126560165928> Unknown subcommand.', flags: 64 });
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('automod case error:', err);
+    if (!interaction.replied) {
+      await interaction.reply({ content: '<:a_2:1415171126560165928> Something went wrong while handling the automod command.', flags: 64 });
     }
   }
   break;
