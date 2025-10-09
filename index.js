@@ -103,7 +103,7 @@ async function loadCasesFromFile(guildId = null) {
       for (const [caseId, caseData] of Object.entries(obj)) {
         moderationCases.set(String(caseId), caseData);
       }
-      console.log(`Loaded ${Object.keys(obj).length} cases for guild ${guildId}`);
+      console.log(`Cases Loaded; ${Object.keys(obj).length} | Cases for; ${guildId}`);
     } catch (err) {
       console.error(`Error loading cases from file for guild ${guildId}:`, err);
     }
@@ -172,7 +172,7 @@ async function loadServerPrefixes() {
         console.error(`Error loading server prefixes for guild ${gid}:`, err);
       }
     }
-    console.log(`Loaded prefixes for ${serverPrefixes.size} guilds`);
+    console.log(`Prefixes Loaded; ${serverPrefixes.size}g`);
   } catch (err) {
     console.error('Error loading server prefixes from file:', err);
   }
@@ -205,7 +205,7 @@ async function loadAutomodConfig() {
         console.error(`Error loading automod config for guild ${gid}:`, err);
       }
     }
-    console.log(`Loaded automod configs for ${serverAutomodConfig.size} guilds`);
+    console.log(`Loaded automod configs; ${serverAutomodConfig.size}g`);
   } catch (err) {
     console.error('Error loading automod configs from file:', err);
   }
