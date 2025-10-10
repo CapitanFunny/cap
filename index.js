@@ -6247,14 +6247,13 @@ client.once(Events.ClientReady, async (readyClient) => {
 **After *a brief debug testing session*, no errors have been found.**
 
 ## Updates;
-- **VERY LARGE**
-The bot now runs on a ***server that I provided myself. (capitanfunny)***
-This should increase overall preformance, and allow for quicker access to the server directly.
+- fixed code bug where if a user had registered a command in a channel where the bot has access to view, but no access to send messages, the bot would crash.
 
 ## QOL changes;
 - soon, error codes will be implemented for easier and faster debugging.
 
 If you find an error, please open a <#1376450603068166165> ticket.
+Date of last startup: <t:${Math.floor(Date.now() / 1000)}:F>
 
 **Keep an eye out on this channel for more bot updates!**
 -# shutdowns, restarts, bugs, data breaches, optimizations, security updates, and new commands will be hoisted here.`
