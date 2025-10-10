@@ -3321,7 +3321,6 @@ client.on(Events.AutoModerationActionExecution, async (action) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.replied || interaction.deferred) return;
-  if (!interaction.isChatInputCommand()) return;
   if (interaction.isButton() && interaction.customId.startsWith('verify_')) {
     await interaction.deferReply({ flags: 64 });
     const accountAgeMs = Date.now() - interaction.user.createdAt.getTime();
