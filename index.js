@@ -40,52 +40,76 @@ const client = new Client({
 // ============================================================================
 // File Storage 1/10
 // ============================================================================
-
-(function applySafeSendPatch() {
+(() => {
   try {
     const djs = require('discord.js');
-    const channelConstructors = ['TextChannel', 'NewsChannel', 'ThreadChannel'];
-    for (const name of channelConstructors) {
-      const C = djs[name];
-      if (!C || !C.prototype) continue;
-      const orig = C.prototype.send;
-      if (!orig || orig.__safeSendPatched) continue;
+    const { PermissionsBitField } = djs;
 
-      C.prototype.send = async function patchedSend(...args) {
-        try {
-          const perms = (typeof this.permissionsFor === 'function') ? this.permissionsFor(client.user) : null;
-          if (perms && !perms.has(PermissionsBitField.Flags.SendMessages)) {
-            return null;
-          }
-          return await orig.apply(this, args);
-        } catch (e) {
-          return null;
-        }
+    function makeDummyMessage(channel) {
+      const dummy = {
+        id: '0',
+        channel,
+        author: client.user,
+        async edit() { return dummy; },
+        async delete() { return null; },
+        async reply() { return dummy; },
+        async react() { return null; },
+        attachments: { size: 0, first: () => null },
+        embeds: [],
+        content: '',
       };
-      C.prototype.send.__safeSendPatched = true;
+      return dummy;
     }
-    const Msg = djs.Message;
-    if (Msg && Msg.prototype) {
-      const origReply = Msg.prototype.reply;
-      if (origReply && !origReply.__safeSendPatched) {
-        Msg.prototype.reply = async function patchedReply(...args) {
-          try {
-            const ch = this.channel;
-            const perms = (ch && typeof ch.permissionsFor === 'function') ? ch.permissionsFor(client.user) : null;
-            if (perms && !perms.has(PermissionsBitField.Flags.SendMessages)) {
-              return null;
-            }
-            return await origReply.apply(this, args);
-          } catch (e) {
-            return null;
-          }
-        };
-        Msg.prototype.reply.__safeSendPatched = true;
+
+    function shouldNoOp(channel) {
+      try {
+        if (!channel || typeof channel.permissionsFor !== 'function') return false;
+        const perms = channel.permissionsFor(client.user);
+        return perms && !perms.has(PermissionsBitField.Flags.SendMessages);
+      } catch {
+        return false;
       }
     }
-  } catch (err) {
+
+    const channelClasses = [
+      djs.TextChannel,
+      djs.NewsChannel,
+      djs.ThreadChannel,
+      djs.BaseGuildTextChannel
+    ].filter(Boolean);
+
+    for (const C of channelClasses) {
+      if (!C || !C.prototype || C.prototype.send.__safePatched) continue;
+      const origSend = C.prototype.send;
+      C.prototype.send = async function (...args) {
+        try {
+          if (shouldNoOp(this)) return makeDummyMessage(this);
+          return await origSend.apply(this, args);
+        } catch {
+          return makeDummyMessage(this);
+        }
+      };
+      C.prototype.send.__safePatched = true;
+    }
+
+    if (djs.Message && djs.Message.prototype && !djs.Message.prototype.reply.__safePatched) {
+      const origReply = djs.Message.prototype.reply;
+      djs.Message.prototype.reply = async function (...args) {
+        try {
+          const ch = this.channel;
+          if (shouldNoOp(ch)) return makeDummyMessage(ch);
+          return await origReply.apply(this, args);
+        } catch {
+          return makeDummyMessage(this.channel);
+        }
+      };
+      djs.Message.prototype.reply.__safePatched = true;
+    }
+
+  } catch {
   }
 })();
+
 
 const GUILD_CONFIG_ROOT = path.join(__dirname, 'guildconfigurations');
 
