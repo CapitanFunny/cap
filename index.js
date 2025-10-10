@@ -40,6 +40,53 @@ const client = new Client({
 // ============================================================================
 // File Storage 1/10
 // ============================================================================
+
+(function applySafeSendPatch() {
+  try {
+    const djs = require('discord.js');
+    const channelConstructors = ['TextChannel', 'NewsChannel', 'ThreadChannel'];
+    for (const name of channelConstructors) {
+      const C = djs[name];
+      if (!C || !C.prototype) continue;
+      const orig = C.prototype.send;
+      if (!orig || orig.__safeSendPatched) continue;
+
+      C.prototype.send = async function patchedSend(...args) {
+        try {
+          const perms = (typeof this.permissionsFor === 'function') ? this.permissionsFor(client.user) : null;
+          if (perms && !perms.has(PermissionsBitField.Flags.SendMessages)) {
+            return null;
+          }
+          return await orig.apply(this, args);
+        } catch (e) {
+          return null;
+        }
+      };
+      C.prototype.send.__safeSendPatched = true;
+    }
+    const Msg = djs.Message;
+    if (Msg && Msg.prototype) {
+      const origReply = Msg.prototype.reply;
+      if (origReply && !origReply.__safeSendPatched) {
+        Msg.prototype.reply = async function patchedReply(...args) {
+          try {
+            const ch = this.channel;
+            const perms = (ch && typeof ch.permissionsFor === 'function') ? ch.permissionsFor(client.user) : null;
+            if (perms && !perms.has(PermissionsBitField.Flags.SendMessages)) {
+              return null;
+            }
+            return await origReply.apply(this, args);
+          } catch (e) {
+            return null;
+          }
+        };
+        Msg.prototype.reply.__safeSendPatched = true;
+      }
+    }
+  } catch (err) {
+  }
+})();
+
 const GUILD_CONFIG_ROOT = path.join(__dirname, 'guildconfigurations');
 
 function guildFolderName(guildId) {
