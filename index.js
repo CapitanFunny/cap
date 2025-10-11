@@ -1102,6 +1102,27 @@ async function saveReminders(guildId) {
   await writeJsonFile(guildRemindersPath(guildId), arr);
 }
 
+async function resetGuildData(guildId) {
+  try {
+    const folder = guildFolder(guildId);
+    await fsp.rm(folder, { recursive: true, force: true });
+
+    moderationCases.forEach((v, k) => { if (v.guildId === guildId) moderationCases.delete(k); });
+    serverPrefixes.delete(guildId);
+    serverLoggingChannels.delete(guildId);
+    serverAutomodConfig.delete(guildId);
+    serverImmunes.delete(guildId);
+    reminders.delete(guildId);
+    scheduledMessages.delete(guildId);
+
+    console.log(`✅ Guild data reset for ${guildId}`);
+    return true;
+  } catch (err) {
+    console.error(`❌ Failed to reset guild data for ${guildId}:`, err);
+    return false;
+  }
+}
+
 function getGuildReminders(guildId) {
   const arr = reminders.get(String(guildId));
   if (!arr) {
@@ -1241,6 +1262,29 @@ async function cleanupExpiredCases(guildId = null) {
       }
     }
   }
+
+  function parseDuration(input) {
+  if (!input) return null;
+
+  const match = String(input).trim().match(/^(\d+)\s*(s|m|h|d|w|mo|y)?$/i);
+  if (!match) return null;
+
+  const value = parseInt(match[1], 10);
+  const unit = (match[2] || 'm').toLowerCase();
+
+  const multipliers = {
+    s: 1000,
+    m: 1000 * 60,
+    h: 1000 * 60 * 60,
+    d: 1000 * 60 * 60 * 24,
+    w: 1000 * 60 * 60 * 24 * 7,
+    mo: 1000 * 60 * 60 * 24 * 30,
+    y: 1000 * 60 * 60 * 24 * 365
+  };
+
+  return value * (multipliers[unit] || multipliers.m);
+}
+
 
   if (cleaned > 0) {
     await saveCasesToFile(guildId);
@@ -1748,6 +1792,22 @@ case 'debug': {
       break;
     }
 
+    case 'reset': {
+  if (message.author.id !== message.guild.ownerId)
+    return message.reply('❌ Only the **server owner** can use this command.');
+
+  if (args[0] && args[0].toLowerCase() === 'authorize') {
+    const ok = await resetGuildData(message.guild.id);
+    if (ok) {
+      return message.reply('✅ All server data has been reset successfully.');
+    } else {
+      return message.reply('❌ Failed to reset server data. Check logs for details.');
+    }
+  }
+
+  return message.reply('⚠️ Type `reset authorize` to confirm full server reset. This will permanently erase all bot data for this server.');
+}
+
     case 'view': {
       try {
         const rules = await message.guild.autoModerationRules.fetch();
@@ -1945,7 +2005,7 @@ const safeAvatarLink = user?.displayAvatarURL
 
 const embed = new EmbedBuilder()
   .setColor(0xFFFFFF)
-  .setTitle(`Member Info — ${safeUsername}`)
+  .setTitle(`${safeUsername}`)
   .setThumbnail(safeAvatar)
   .addFields(
     { name: 'Username', value: safeUsername, inline: true },
@@ -2158,21 +2218,13 @@ case 'verification': {
 }
 
 
-      case 'afk':
-        const afkReason = args.join(' ') || 'No reason provided';
-        await setUserAFK(member, afkReason);
+      case 'afk': {
+  const reason = args.join(' ') || 'No reason provided';
+  await setUserAFK(message.member, reason);
+  message.reply(`💤 You are now AFK: ${reason}`);
+  break;
+}
 
-        const afkConfirmEmbed = new EmbedBuilder()
-          .setColor(0xFFFFFF)
-          .setTitle('AFK status set')
-          .addFields(
-            { name: 'User', value: member.user.tag, inline: true },
-            { name: 'Reason', value: afkReason, inline: true }
-          )
-          .setTimestamp();
-
-        await message.reply({ embeds: [afkConfirmEmbed] });
-        break;
         
         case 'avatar':
         case 'av':
@@ -2375,7 +2427,8 @@ if (caseData.type === 'ban') {
   break;
 }
 
-    case 'schedulemsg': {
+    case 'schedulemsg':
+    case 'schedule': {
   if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
     return await message.reply('<:a_2:1415171126560165928> You need Manage Messages permission to schedule messages.');
   }
@@ -2587,28 +2640,31 @@ case 'mute': {
   }
 
   const muteTargetUser = await resolveUser(guild, args[0]);
-  if (!muteTargetUser) return await message.reply('<:a_2:1415171126560165928> Please provide a valid user (mention, ID, or username) to mute.');
+  if (!muteTargetUser)
+    return await message.reply('<:a_2:1415171126560165928> Please provide a valid user (mention, ID, or username) to mute.');
 
   const muteTarget = guild.members.cache.get(muteTargetUser.id);
-  if (!muteTarget) return await message.reply('<:a_2:1415171126560165928> User not found in this server.');
+  if (!muteTarget)
+    return await message.reply('<:a_2:1415171126560165928> User not found in this server.');
 
   if (isMemberImmune(guild, muteTarget, 'mute')) {
     return await message.reply('<:a_2:1415171126560165928> That user (or one of their roles) is immune to `mute`.');
   }
 
-  const muteDuration = parseInt(args[1]);
-  if (!muteDuration || muteDuration < 1) return await message.reply('<:a_2:1415171126560165928> Please provide a valid duration in minutes.');
+  const durationInput = args[1];
+  const muteDurationMs = parseDuration(durationInput);
 
-  const muteReason = args.slice(2).join(' ') || null;
+  if (!muteDurationMs || muteDurationMs < 1000)
+    return await message.reply('<:a_2:1415171126560165928> Please provide a valid duration. Example: `10m`, `1h`, `2d`, `1w`, etc.');
+
+  const muteReason = args.slice(2).join(' ') || 'No reason provided';
   const muteCaseId = generateCaseId();
 
-  if (muteTarget.id === guild.ownerId) {
+  if (muteTarget.id === guild.ownerId)
     return await message.reply('<:a_2:1415171126560165928> Cannot timeout the server owner.');
-  }
 
-  if (muteTarget.user.bot) {
+  if (muteTarget.user.bot)
     return await message.reply('<:a_2:1415171126560165928> Cannot timeout bots.');
-  }
 
   const botMember = guild.members.cache.get(client.user.id);
   if (muteTarget.roles.highest.position >= botMember.roles.highest.position) {
@@ -2620,7 +2676,7 @@ case 'mute': {
   }
 
   try {
-    await muteTarget.timeout(muteDuration * 60 * 1000, muteReason);
+    await muteTarget.timeout(muteDurationMs, muteReason);
   } catch (error) {
     console.error('Mute error:', error);
     if (error.code === 50013) {
@@ -2629,23 +2685,42 @@ case 'mute': {
     return await message.reply('<:a_2:1415171126560165928> Failed to mute the user due to an unexpected error.');
   }
 
+  const humanReadable = (() => {
+    const units = [
+      { label: 'year', ms: 1000 * 60 * 60 * 24 * 365 },
+      { label: 'month', ms: 1000 * 60 * 60 * 24 * 30 },
+      { label: 'week', ms: 1000 * 60 * 60 * 24 * 7 },
+      { label: 'day', ms: 1000 * 60 * 60 * 24 },
+      { label: 'hour', ms: 1000 * 60 * 60 },
+      { label: 'minute', ms: 1000 * 60 },
+    ];
+    for (const u of units) {
+      if (muteDurationMs >= u.ms) {
+        const val = Math.round(muteDurationMs / u.ms);
+        return `${val} ${u.label}${val > 1 ? 's' : ''}`;
+      }
+    }
+    return `${Math.round(muteDurationMs / 1000)} seconds`;
+  })();
+
   moderationCases.set(muteCaseId, {
     type: 'mute',
     target: muteTarget.user.id,
     moderator: message.author.id,
     reason: muteReason,
     proof: null,
-    duration: `${muteDuration} minutes`,
+    duration: humanReadable,
     timestamp: new Date(),
     voided: false,
     guildId: guildId
   });
 
   await saveCasesToFile(guildId);
-  await logModerationAction(guild, 'mute', message.author, muteTarget.user, muteReason, null, muteCaseId, `${muteDuration} minutes`);
-  await message.reply(`<a:y1:1415173658237866025> ${muteTarget.user.tag} has been muted for ${muteDuration} minutes. Case ID: \`${muteCaseId}\``);
+  await logModerationAction(guild, 'mute', message.author, muteTarget.user, muteReason, null, muteCaseId, humanReadable);
+  await message.reply(`<a:y1:1415173658237866025> ${muteTarget.user.tag} has been muted for ${humanReadable}. Case ID: \`${muteCaseId}\``);
   break;
 }
+
 
       case 'kick':
         if (!member.permissions.has([PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ModerateMembers, PermissionsBitField.Flags.KickMembers])) {
@@ -2708,29 +2783,37 @@ if (!banTarget) return await message.reply('<:a_2:1415171126560165928> Please pr
         break;
 
     case 'remindme':
-    case 'remind':{
-  const timeStr = args.shift();
-  const content = args.join(' ');
+case 'remind': {
+  const timeInput = args.shift();
+  const reminderText = args.join(' ');
 
-  if (!timeStr || !content) {
-    return await message.reply('Usage: `!remindme {timeInMinutes} {reminder}`');
+  if (!timeInput || !reminderText) {
+    return await message.reply('⚠️ Usage: `!remindme <duration> <message>`\nExample: `!remindme 10m Take a break`');
   }
 
-  const minutes = parseInt(timeStr);
-  if (isNaN(minutes) || minutes <= 0) {
-    return await message.reply('Time must be a positive number of minutes.');
+  const delayMs = parseDuration(timeInput);
+  if (!delayMs || delayMs < 1000) {
+    return await message.reply('⚠️ Invalid time format. Use formats like `10m`, `1h`, `2d`, `1w`, etc.');
   }
 
-  const remindAt = Date.now() + minutes * 60_000;
-  const arr = getGuildReminders(guildId);
-  const id = Date.now().toString();
+  const remindAt = Date.now() + delayMs;
 
-  arr.push({ id, userId: message.author.id, time: remindAt, content });
-  reminders.set(guildId, arr);
-  await saveReminders(guildId);
+  if (!reminders.has(message.guild.id)) reminders.set(message.guild.id, []);
+  const guildReminders = reminders.get(message.guild.id);
+  guildReminders.push({
+    userId: message.author.id,
+    guildId: message.guild.id,
+    message: reminderText,
+    time: remindAt,
+  });
 
-  return await message.reply(`<a:y1:1415173658237866025> I’ll remind you in ${minutes} minutes. (ID: \`${id}\`)`);
+  await saveRemindersToFile(message.guild.id);
+
+  const when = `<t:${Math.floor(remindAt / 1000)}:R>`;
+  await message.reply(`✅ Got it! I'll remind you **${when}** about: "${reminderText}"`);
+  break;
 }
+
 
 case 'reminddel': {
   const id = args[0];
@@ -3365,6 +3448,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
 
+  if (interaction.commandName === 'reset') {
+  if (interaction.user.id !== interaction.guild.ownerId)
+    return interaction.reply({ content: '❌ Only the **server owner** can use this command.', ephemeral: true });
+
+  const sub = interaction.options.getString('action');
+  if (sub === 'authorize') {
+    const ok = await resetGuildData(interaction.guild.id);
+    if (ok) {
+      return interaction.reply({ content: '✅ All server data has been reset successfully.' });
+    } else {
+      return interaction.reply({ content: '❌ Failed to reset server data. Check logs for details.' });
+    }
+  }
+
+  return interaction.reply({ content: '⚠️ Type `reset authorize` to confirm full server reset. This will permanently erase all bot data for this server.' });
+}
+
   const commandName = interaction.commandName;
   const member = interaction.member;
   const guild = interaction.guild;
@@ -3717,21 +3817,38 @@ client.on(Events.InteractionCreate, async (interaction) => {
         break;
         }
 
-        case 'remindme':
-        case 'remind': {
-  const minutes = interaction.options.getInteger('time');
-  const content = interaction.options.getString('content');
+  case 'remindme':
+  case 'remind': {
+        const timeInput = args.shift();
+        const reminderText = args.join(' ');
 
-  const remindAt = Date.now() + minutes * 60_000;
-  const arr = getGuildReminders(interaction.guildId);
-  const id = Date.now().toString();
+      if (!timeInput || !reminderText) {
+        return await interaction.reply('⚠️ Usage: `!remindme <duration> <message>`\nExample: `!remindme 10m Take a break`');
+      }
 
-  arr.push({ id, userId: interaction.user.id, time: remindAt, content });
-  reminders.set(interaction.guildId, arr);
-  await saveReminders(interaction.guildId);
+        const delayMs = parseDuration(timeInput);
+      if (!delayMs || delayMs < 1000) {
+        return await interaction.reply('⚠️ Invalid time format. Use formats like `10m`, `1h`, `2d`, `1w`, etc.');
+      }
 
-  return await interaction.reply({ content: `⏰ I’ll remind you in ${minutes} minutes. (ID: \`${id}\`)`, flags: 64 });
+      const remindAt = Date.now() + delayMs;
+
+      if (!reminders.has(interaction.guild.id)) reminders.set(interaction.guild.id, []);
+        const guildReminders = reminders.get(interaction.guild.id);
+      guildReminders.push({
+      userId: interaction.author.id,
+      guildId: interaction.guild.id,
+      message: reminderText,
+      time: remindAt,
+      });
+
+    await saveRemindersToFile(interaction.guild.id);
+
+  const when = `<t:${Math.floor(remindAt / 1000)}:R>`;
+  await interaction.reply(`✅ Got it! I'll remind you **${when}** about: "${reminderText}"`);
+  break;
 }
+
 
 case 'reminddel': {
   const id = interaction.options.getString('id');
@@ -4439,6 +4556,27 @@ case 'infract': {
 
   return await interaction.reply({ content: `Scheduled message for ${channel} in ${minutes} minutes.`, flags: 64 });
 }
+
+case 'reset': {
+  if (interaction.user.id !== interaction.guild.ownerId) {
+    return interaction.reply({ content: '❌ Only the **server owner** can use this command.', ephemeral: true });
+  }
+
+  const sub = interaction.options.getString('action');
+  if (sub && sub.toLowerCase() === 'authorize') {
+    const ok = await resetGuildData(interaction.guild.id);
+    if (ok) {
+      return interaction.reply({ content: '✅ All server data has been reset successfully.' });
+    } else {
+      return interaction.reply({ content: '❌ Failed to reset server data. Check logs for details.' });
+    }
+  }
+
+  return interaction.reply({
+    content: '⚠️ Type `reset authorize` to confirm full server reset. This will permanently erase all bot data for this server.',
+  });
+}
+
 
 case 'scheduledel': {
   if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
@@ -5709,7 +5847,7 @@ const globalCommands = [
 
 new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Replies with Pong!')
+    .setDescription('Replies with Pong, along with other statistics!')
     .setDMPermission(true),
 
 new SlashCommandBuilder()
@@ -6135,6 +6273,16 @@ new SlashCommandBuilder()
   .setName('remindlist')
   .setDescription('View your active reminders'),
 
+  new SlashCommandBuilder()
+  .setName('reset')
+  .setDescription('Reset all bot settings and data for this server (owner only)')
+  .addStringOption(opt =>
+    opt.setName('action')
+      .setDescription('Type "authorize" to confirm')
+      .setRequired(false)
+  ),
+
+
     
     new SlashCommandBuilder()
   .setName('debug')
@@ -6270,10 +6418,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 **After *a brief debug testing session*, no errors have been found.**
 
 ## Updates;
-- fixed code bug where if a user had registered a command in a channel where the bot has access to view, but no access to send messages, the bot would crash.
-
-## QOL changes;
-- soon, error codes will be implemented for easier and faster debugging.
+- added 'reset' command, along with removing embed for commands "remind" and "shedule".
 
 If you find an error, please open a <#1376450603068166165> ticket.
 Date of last startup: <t:${Math.floor(Date.now() / 1000)}:F>
