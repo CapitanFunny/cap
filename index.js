@@ -432,7 +432,187 @@ async function migrateOldRootFiles() {
     console.error('Migration error:', err);
   }
 }
+function guildTicketsPath(guildId) {
+  return path.join(guildFolder(guildId), 'tickets.json');
+}
+async function loadTickets() {
+  await ensureRoot();
+  serverTickets = new Map();
+  const entries = await fsp.readdir(GUILD_CONFIG_ROOT, { withFileTypes: true }).catch(()=>[]);
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const gid = e.name.startsWith('guild_') ? e.name.slice(6) : e.name;
+    const p = guildTicketsPath(gid);
+    try {
+      const obj = (await readJsonFileNullable(p)) || { panels: {}, nextTicketId: 1, tickets: {} };
+      serverTickets.set(gid, obj);
+    } catch (err) {
+      console.error(`Error loading tickets for guild ${gid}:`, err);
+      serverTickets.set(gid, { panels: {}, nextTicketId: 1, tickets: {} });
+    }
+  }
+  console.log(`Loaded ticket configs for ${serverTickets.size} guilds`);
+}
+async function saveTickets(guildId) {
+  await ensureGuildFolder(guildId);
+  const obj = serverTickets.get(String(guildId)) || { panels: {}, nextTicketId: 1, tickets: {} };
+  await writeJsonFile(guildTicketsPath(guildId), obj);
+}
 
+function getGuildTickets(guildId) {
+  const gid = String(guildId);
+  if (!serverTickets.has(gid)) {
+    serverTickets.set(gid, { panels: {}, nextTicketId: 1, tickets: {} });
+  }
+  return serverTickets.get(gid);
+}
+function applyNameTemplate(template, ticketId, user) {
+  if (!template) return `${ticketId}-${user.username}`.slice(0, 90);
+  return template
+    .replace(/\{ticket\.id\}/gi, String(ticketId))
+    .replace(/\{user\}/gi, user.username)
+    .replace(/\{user\.id\}/gi, user.id)
+    .slice(0, 90); 
+}
+function applyNameTemplate(template, ticketId, user) {
+  if (!template) return `${ticketId}-${user.username}`.slice(0, 90);
+  return template
+    .replace(/\{ticket\.id\}/gi, String(ticketId))
+    .replace(/\{user\}/gi, user.username)
+    .replace(/\{user\.id\}/gi, user.id)
+    .slice(0, 90); 
+}
+
+async function createTicketChannel(guild, panelConfig, openerMember) {
+
+  const guildId = guild.id;
+  const gtickets = getGuildTickets(guildId);
+  const ticketId = gtickets.nextTicketId || 1;
+  const channelName = applyNameTemplate(panelConfig.channelName || `{ticket.id}-{user}`, ticketId, openerMember.user).toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+
+  const permissionOverwrites = [
+    {
+      id: guild.roles.everyone.id,
+      deny: ['ViewChannel', 'SendMessages']
+    },
+    {
+      id: openerMember.id,
+      allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+    }
+  ];
+
+
+  if (Array.isArray(panelConfig.moderators)) {
+    for (const r of panelConfig.moderators) {
+      permissionOverwrites.push({
+        id: r,
+        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageMessages']
+      });
+    }
+  }
+
+  if (Array.isArray(panelConfig.allowedRoles)) {
+    for (const r of panelConfig.allowedRoles) {
+      permissionOverwrites.push({
+        id: r,
+        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+      });
+    }
+  }
+
+  const createOptions = {
+    name: channelName,
+    type: 0,
+    permissionOverwrites
+  };
+  if (panelConfig.categoryId) createOptions.parent = panelConfig.categoryId;
+
+  const channel = await guild.channels.create(createOptions).catch(err => { console.error('createTicketChannel error', err); return null; });
+  if (!channel) throw new Error('Failed to create ticket channel');
+
+  const ticketRecord = {
+    id: String(ticketId),
+    channelId: channel.id,
+    openerId: openerMember.id,
+    panelId: panelConfig.id || null,
+    createdAt: new Date(),
+    closed: false,
+  };
+
+  gtickets.tickets[ticketRecord.id] = ticketRecord;
+  gtickets.nextTicketId = (gtickets.nextTicketId || 1) + 1;
+  serverTickets.set(guildId, gtickets);
+  await saveTickets(guildId);
+
+  return { channel, ticketRecord };
+}
+async function closeTicket(guildId, ticketId, keepModerators = true) {
+  const gtickets = getGuildTickets(guildId);
+  const ticket = gtickets.tickets[String(ticketId)];
+  if (!ticket) throw new Error('Ticket not found');
+  const ch = (await client.channels.fetch(ticket.channelId).catch(()=>null));
+  if (!ch || !ch.isTextBased()) throw new Error('Ticket channel not available');
+
+  await ch.permissionOverwrites.edit(ticket.openerId, { ViewChannel: false, SendMessages: false }).catch(()=>{});
+  ticket.closed = true;
+  ticket.closedAt = new Date();
+  gtickets.tickets[ticketId] = ticket;
+  await saveTickets(guildId);
+  return ch;
+}
+async function reopenTicket(guildId, ticketId) {
+  const gtickets = getGuildTickets(guildId);
+  const ticket = gtickets.tickets[String(ticketId)];
+  if (!ticket) throw new Error('Ticket not found');
+  const ch = (await client.channels.fetch(ticket.channelId).catch(()=>null));
+  if (!ch || !ch.isTextBased()) throw new Error('Ticket channel not available');
+
+  await ch.permissionOverwrites.edit(ticket.openerId, { ViewChannel: true, SendMessages: true }).catch(()=>{});
+  ticket.closed = false;
+  ticket.reopenedAt = new Date();
+  gtickets.tickets[ticketId] = ticket;
+  await saveTickets(guildId);
+  return ch;
+}
+
+async function transcriptTicket(guildId, ticketId, transcriptChannelId) {
+  const gtickets = getGuildTickets(guildId);
+  const ticket = gtickets.tickets[String(ticketId)];
+  if (!ticket) throw new Error('Ticket not found');
+  const ch = (await client.channels.fetch(ticket.channelId).catch(()=>null));
+  if (!ch || !ch.isTextBased()) throw new Error('Ticket channel not available');
+
+  let all = [];
+  let lastId = null;
+  while (true) {
+    const options = { limit: 100 };
+    if (lastId) options.before = lastId;
+    const msgs = await ch.messages.fetch(options);
+    if (!msgs || msgs.size === 0) break;
+    all.push(...msgs.map(m => m));
+    lastId = msgs.last().id;
+    if (msgs.size < 100) break;
+  }
+  all = all.reverse();
+
+  let content = `name of ticket; ${ch.name}\nticket id; ${ticket.id}\ncreation date; ${new Date(ticket.createdAt).toISOString()}\n\n\n`;
+  for (const m of all) {
+    const author = m.author ? `<@${m.author.id}>` : 'Unknown';
+    const time = `<t:${Math.floor(m.createdTimestamp/1000)}:F>`;
+    const text = m.content || (m.attachments?.size ? '[attachment]' : '');
+    content += `${author} ${time}\n${text}\n\n`;
+  }
+  content += `\n{ticket ${ticket.closed ? 'closed' : 'open'}}\n`;
+  const fname = `transcript_${guildId}_${ticket.id}.txt`;
+  const tmpPath = path.join(__dirname, fname);
+  await fsp.writeFile(tmpPath, content, 'utf8');
+  const tchannel = await client.channels.fetch(transcriptChannelId).catch(()=>null);
+  if (tchannel && tchannel.isTextBased()) {
+    await tchannel.send({ content: `Transcript for ticket ${ticket.id}`, files: [tmpPath] }).catch(()=>{});
+  }
+  try { await fsp.unlink(tmpPath).catch(()=>{}); } catch {}
+  return content;
+}
 
 // ============================================================================
 // In-Memory Data 2/10
@@ -443,6 +623,7 @@ let serverLoggingChannels = new Map();
 let serverImmunes = new Map();
 let scheduledMessages = new Map();
 let reminders = new Map();
+let serverTickets = new Map();
 const afkUsers = new Map();
 const commandCooldowns = new Map();
 const aboutInfo = {
@@ -1554,6 +1735,143 @@ if (cooldownCheck.onCooldown) {
 // ============================================================================
 
 switch (commandName) {
+
+case 'ticketpanel': {
+  if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) return await message.reply('Admins only.');
+  const filter = m => m.author.id === message.author.id;
+  await message.reply('Enter a short ID for this panel (alphanumeric), or `cancel` to stop:');
+  const idMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
+  if (!idMsg || idMsg.content.toLowerCase() === 'cancel') return message.reply('Canceled.');
+  const panelId = idMsg.content.trim();
+
+  await message.reply('Optional: channel ID to send transcripts to (or `none`):');
+  const chMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
+  const transcriptChannel = (chMsg && chMsg.content.toLowerCase() !== 'none') ? chMsg.content.trim() : null;
+
+  await message.reply('Optional: channel name template for tickets (e.g. `{ticket.id}-{user}`), or press enter to accept default:');
+  const nameMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
+  const nameTemplate = (nameMsg && nameMsg.content.trim()) ? nameMsg.content.trim() : '{ticket.id}-{user}';
+  const gt = getGuildTickets(guild.id);
+  gt.panels = gt.panels || {};
+  gt.panels[panelId] = {
+    id: panelId,
+    transcriptChannel,
+    channelName: nameTemplate,
+    allowedRoles: [], moderators: []
+  };
+  serverTickets.set(guild.id, gt);
+  await saveTickets(guild.id);
+  const panelRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`ticket_open:${guild.id}:${panelId}`).setStyle(ButtonStyle.Primary).setLabel('Open Ticket')
+  );
+
+  await message.reply({ content: `Ticket panel **${panelId}** created.`, components: [panelRow] });
+  break;
+}
+
+case 'transcript': {
+  if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return await message.reply('You need Manage Messages.');
+  const tid = args[0];
+  if (!tid) return await message.reply('Usage: !transcript <ticketId>');
+  const gt = getGuildTickets(guild.id);
+  if (!gt || !gt.tickets[tid]) return await message.reply('Ticket not found.');
+  const panel = gt.panels[gt.tickets[tid].panelId] || {};
+  const transcriptCh = panel.transcriptChannel || getServerLoggingChannel(guild.id, 'alllogs') || null;
+  if (!transcriptCh) return await message.reply('No transcript logging channel configured for this panel or server.');
+  await transcriptTicket(guild.id, tid, transcriptCh).catch(err => { console.error(err); return message.reply('Transcript failed.'); });
+  await message.reply(`<a:y1:1415173658237866025> Transcript created for ticket ${tid}.`);
+  break;
+}
+
+case 'close': {
+  if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return await message.reply('You need Manage Messages.');
+  const tid = args[0];
+  if (!tid) return await message.reply('Usage: !close <ticketId>');
+  try {
+    const ch = await closeTicket(guild.id, tid, true);
+    await message.reply(`<a:y1:1415173658237866025> Ticket ${tid} closed. Channel: <#${ch.id}>`);
+  } catch (err) {
+    console.error(err);
+    await message.reply('Failed to close ticket.');
+  }
+  break;
+}
+
+case 'reopen': {
+  if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return await message.reply('You need Manage Messages.');
+  const tid = args[0]; if (!tid) return await message.reply('Usage: !reopen <ticketId>');
+  try {
+    const ch = await reopenTicket(guild.id, tid);
+    await message.reply(`<a:y1:1415173658237866025> Ticket ${tid} reopened. Channel: <#${ch.id}>`);
+  } catch (err) {
+    console.error(err);
+    await message.reply('Failed to reopen ticket.');
+  }
+  break;
+}
+
+case 'rename': {
+  if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return await message.reply('You need Manage Messages.');
+  const tid = args.shift(); const newName = args.join(' ');
+  if (!tid || !newName) return await message.reply('Usage: !rename <ticketId> <new name>');
+  const gt = getGuildTickets(guild.id);
+  const ticket = gt?.tickets?.[tid];
+  if (!ticket) return await message.reply('Ticket not found.');
+  const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
+  if (!ch || !ch.isTextBased()) return await message.reply('Channel not available.');
+  await ch.setName(newName.slice(0,90)).catch(()=>{});
+  return await message.reply(`<a:y1:1415173658237866025> Ticket ${tid} renamed to ${newName}`);
+  break;
+}
+
+case 'add': {
+  if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return await message.reply('You need Manage Messages.');
+  const tid = args.shift(); const action = (args.shift() || '').toLowerCase(); const target = args.shift();
+  if (!tid || !action || !target || !['add','remove'].includes(action)) return await message.reply('Usage: !add <ticketId> add|remove <@user|roleId>');
+  const gt = getGuildTickets(guild.id);
+  const ticket = gt?.tickets?.[tid];
+  if (!ticket) return await message.reply('Ticket not found.');
+  const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
+  if (!ch || !ch.isTextBased()) return await message.reply('Channel not available.');
+
+  const mentionMatch = target.match(/^<@!?(\d+)>$/);
+  const idMatch = target.match(/^\d{17,19}$/);
+  let targetId = null;
+  if (mentionMatch) targetId = mentionMatch[1];
+  else if (idMatch) targetId = idMatch[0];
+  else return await message.reply('Provide a mention or ID.');
+
+  try {
+    if (action === 'add') {
+      await ch.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true }).catch(()=>{});
+      await message.reply(`Added <@${targetId}> to ticket ${tid}.`);
+    } else {
+      await ch.permissionOverwrites.edit(targetId, { ViewChannel: false, SendMessages: false }).catch(()=>{});
+      await message.reply(`Removed <@${targetId}> from ticket ${tid}.`);
+    }
+  } catch (err) {
+    console.error(err);
+    await message.reply('Failed to change permissions.');
+  }
+  break;
+}
+
+case 'delete': {
+  if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return await message.reply('You need Manage Messages.');
+  const tid = args[0]; if (!tid) return await message.reply('Usage: !delete <ticketId>');
+  const gt = getGuildTickets(guild.id);
+  const ticket = gt?.tickets?.[tid];
+  if (!ticket) return await message.reply('Ticket not found.');
+  const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
+  if (ch && ch.deletable) {
+    await ch.delete().catch(()=>{});
+  }
+  delete gt.tickets[tid];
+  await saveTickets(guild.id);
+  await message.reply(`<a:y1:1415173658237866025> Ticket ${tid} deleted.`);
+  break;
+}
+
 case 'membercount': {
   const guild = message.guild;
   const total = guild.memberCount;
@@ -3446,6 +3764,100 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return await interaction.editReply('<a:y1:1415173658237866025> You have been verified!');
   }
 
+  if (interaction.isModalSubmit && interaction.isModalSubmit()) {
+  try {
+    if (interaction.customId && interaction.customId.startsWith('ticketpanel_modal:')) {
+      await interaction.deferReply({ ephemeral: true });
+
+      const guildId = interaction.customId.split(':')[1] || interaction.guildId;
+      const panelId = interaction.fields.getTextInputValue('panel_id').trim();
+      const transcriptChannel = interaction.fields.getTextInputValue('transcript_channel').trim();
+      const channelNameTemplate = interaction.fields.getTextInputValue('channel_name_template').trim();
+      const openMessage = interaction.fields.getTextInputValue('open_message').trim();
+      const moderatorRolesCsv = interaction.fields.getTextInputValue('moderator_roles').trim();
+
+      const gt = getGuildTickets(guildId);
+      gt.panels = gt.panels || {};
+      const panel = {
+        id: panelId,
+        transcriptChannel: transcriptChannel.toLowerCase() === 'none' ? null : (transcriptChannel || null),
+        channelName: channelNameTemplate || '{ticket.id}-{user}',
+        openMessage: openMessage || null,
+        allowedRoles: [],
+        moderators: moderatorRolesCsv ? moderatorRolesCsv.split(',').map(s => s.trim()).filter(Boolean) : [],
+        messageChannelId: interaction.channelId,
+        messageId: null
+      };
+
+      gt.panels[panelId] = panel;
+      serverTickets.set(guildId, gt);
+      await saveTickets(guildId);
+      const panelRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ticket_open:${guildId}:${panelId}`)
+          .setLabel('Open Ticket')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      const panelContent = panel.openMessage || `Open a ticket: **${panelId}**`;
+      const sent = await interaction.channel.send({ content: panelContent, components: [panelRow] }).catch(()=>null);
+      if (sent) {
+        panel.messageId = sent.id;
+        panel.messageChannelId = interaction.channelId;
+        await saveTickets(guildId);
+      }
+
+      return interaction.editReply({ content: `Panel **${panelId}** created.` });
+    }
+
+
+    if (interaction.customId && interaction.customId.startsWith('editticket_modal:')) {
+      await interaction.deferReply({ ephemeral: true });
+      const parts = interaction.customId.split(':');
+      const guildId = parts[1] || interaction.guildId;
+      const panelId = parts[2];
+      const gt = getGuildTickets(guildId);
+      const panel = gt?.panels?.[panelId];
+      if (!panel) return interaction.editReply({ content: 'Panel not found.' });
+
+      const transcriptChannel = interaction.fields.getTextInputValue('transcript_channel').trim();
+      const channelNameTemplate = interaction.fields.getTextInputValue('channel_name_template').trim();
+      const openMessage = interaction.fields.getTextInputValue('open_message').trim();
+      const moderatorRolesCsv = interaction.fields.getTextInputValue('moderator_roles').trim();
+
+      panel.transcriptChannel = transcriptChannel.toLowerCase() === 'none' ? null : (transcriptChannel || panel.transcriptChannel);
+      panel.channelName = channelNameTemplate || panel.channelName || '{ticket.id}-{user}';
+      panel.openMessage = openMessage || panel.openMessage;
+      panel.moderators = moderatorRolesCsv ? moderatorRolesCsv.split(',').map(s => s.trim()).filter(Boolean) : panel.moderators || [];
+
+      if (panel.messageChannelId && panel.messageId) {
+        try {
+          const msgChannel = await client.channels.fetch(panel.messageChannelId).catch(()=>null);
+          if (msgChannel && msgChannel.isTextBased()) {
+            const fetched = await msgChannel.messages.fetch(panel.messageId).catch(()=>null);
+            if (fetched) {
+              const panelRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`ticket_open:${guildId}:${panelId}`).setLabel('Open Ticket').setStyle(ButtonStyle.Primary)
+              );
+              await fetched.edit({ content: panel.openMessage || `Open a ticket: **${panelId}**`, components: [panelRow] }).catch(()=>null);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to update panel message', err);
+        }
+      }
+
+      gt.panels[panelId] = panel;
+      serverTickets.set(guildId, gt);
+      await saveTickets(guildId);
+      return interaction.editReply({ content: `Panel **${panelId}** updated.` });
+    }
+  } catch (err) {
+    console.error('modal submit error', err);
+    try { if (!interaction.replied) await interaction.reply({ content: 'An error occurred processing the modal.', ephemeral: true }); } catch {}
+  }
+}
+
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'reset') {
@@ -3484,7 +3896,281 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    switch (commandName) {
+switch (commandName) {
+  case 'ticketpanel': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({ content: 'Administrator permission required.', ephemeral: true });
+    }
+
+    await interaction.reply({ content: 'Let\'s create a ticket panel — respond in this channel. Reply `cancel` at any time to stop.\n1) Enter a short panel ID (alphanumeric):', ephemeral: true });
+
+    const filter = m => m.author.id === interaction.user.id;
+    const channelForCollector = interaction.channel;
+    try {
+      const collected1 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
+      const idMsg = collected1.first();
+      if (!idMsg || idMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+
+      const panelId = idMsg.content.trim();
+
+      await interaction.followUp({ content: '2) Enter channel ID to send transcripts to, or `none` to skip:', ephemeral: true });
+      const collected2 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
+      const chMsg = collected2.first();
+      if (!chMsg || chMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      const transcriptChannel = (chMsg.content.toLowerCase() === 'none') ? null : chMsg.content.trim();
+
+      await interaction.followUp({ content: '3) Enter channel name template (e.g. `{ticket.id}-{user}`) or `default` for `{ticket.id}-{user}`:', ephemeral: true });
+      const collected3 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
+      const nameMsg = collected3.first();
+      if (!nameMsg || nameMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      const nameTemplate = (nameMsg.content.toLowerCase() === 'default' || !nameMsg.content.trim()) ? '{ticket.id}-{user}' : nameMsg.content.trim();
+
+      await interaction.followUp({ content: '4) (Optional) Enter allowed role IDs separated by spaces/commas (or `none`):', ephemeral: true });
+      const collected4 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
+      const rolesMsg = collected4.first();
+      if (!rolesMsg || rolesMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      let allowedRoles = [];
+      if (rolesMsg.content.toLowerCase() !== 'none') {
+        allowedRoles = rolesMsg.content.match(/\d{17,19}/g) || [];
+      }
+
+      await interaction.followUp({ content: '5) (Optional) Enter moderator role IDs separated by spaces/commas (or `none`):', ephemeral: true });
+      const collected5 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
+      const modMsg = collected5.first();
+      if (!modMsg || modMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      let moderators = [];
+      if (modMsg.content.toLowerCase() !== 'none') {
+        moderators = modMsg.content.match(/\d{17,19}/g) || [];
+      }
+
+      const gt = getGuildTickets(interaction.guildId);
+      gt.panels = gt.panels || {};
+      gt.panels[panelId] = {
+        id: panelId,
+        transcriptChannel: transcriptChannel,
+        channelName: nameTemplate,
+        allowedRoles,
+        moderators
+      };
+      serverTickets.set(String(interaction.guildId), gt);
+      await saveTickets(interaction.guildId);
+
+      const panelRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ticket_open:${interaction.guildId}:${panelId}`)
+          .setStyle(ButtonStyle.Primary)
+          .setLabel('Open Ticket')
+      );
+      const sent = await interaction.channel.send({ content: `Ticket panel **${panelId}** — Click to open a ticket.`, components: [panelRow] });
+      gt.panels[panelId].messageId = sent.id;
+      await saveTickets(interaction.guildId);
+
+      return interaction.followUp({ content: `Panel **${panelId}** created and posted in this channel.`, ephemeral: true });
+    } catch (err) {
+      console.error('ticketpanel error', err);
+      return interaction.followUp({ content: 'Timed out or error during panel creation.', ephemeral: true });
+    }
+  }
+
+  case 'editticketpanel': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({ content: 'Administrator permission required.', ephemeral: true });
+    }
+    const panelId = interaction.options.getString('panel_id');
+    const gt = getGuildTickets(interaction.guildId);
+    const panel = gt?.panels?.[panelId];
+    if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+
+    await interaction.reply({ content: `Editing panel **${panelId}** — respond in this channel. Reply \`skip\` to keep a value, or \`cancel\` to abort.\n1) Channel name template (current: ${panel.channelName || '{ticket.id}-{user}'}):`, ephemeral: true });
+
+    const filter = m => m.author.id === interaction.user.id;
+    try {
+      const ch1 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
+      const m1 = ch1.first();
+      if (!m1 || m1.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (m1.content.toLowerCase() !== 'skip') panel.channelName = m1.content.trim();
+
+      await interaction.followUp({ content: `2) Transcript channel ID or \`none\` (current: ${panel.transcriptChannel || 'none'}):`, ephemeral: true });
+      const ch2 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
+      const m2 = ch2.first();
+      if (!m2 || m2.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (m2.content.toLowerCase() !== 'skip') panel.transcriptChannel = (m2.content.toLowerCase() === 'none') ? null : m2.content.trim();
+
+      await interaction.followUp({ content: '3) Allowed role IDs separated by spaces/commas, or `none`:', ephemeral: true });
+      const ch3 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
+      const m3 = ch3.first();
+      if (!m3 || m3.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (m3.content.toLowerCase() !== 'skip') {
+        panel.allowedRoles = (m3.content.toLowerCase() === 'none') ? [] : (m3.content.match(/\d{17,19}/g) || []);
+      }
+
+      await interaction.followUp({ content: '4) Moderator role IDs separated by spaces/commas, or `none`:', ephemeral: true });
+      const ch4 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
+      const m4 = ch4.first();
+      if (!m4 || m4.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (m4.content.toLowerCase() !== 'skip') {
+        panel.moderators = (m4.content.toLowerCase() === 'none') ? [] : (m4.content.match(/\d{17,19}/g) || []);
+      }
+
+      gt.panels[panelId] = panel;
+      serverTickets.set(String(interaction.guildId), gt);
+      await saveTickets(interaction.guildId);
+
+      if (panel.messageId) {
+        try {
+          const msg = await interaction.channel.messages.fetch(panel.messageId).catch(()=>null);
+          if (msg) {
+            const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`ticket_open:${interaction.guildId}:${panelId}`).setStyle(ButtonStyle.Primary).setLabel('Open Ticket')
+            );
+            await msg.edit({ content: `Ticket panel **${panelId}** — Click to open a ticket.`, components: [row] }).catch(()=>{});
+          }
+        } catch {}
+      }
+
+      return interaction.followUp({ content: `Panel **${panelId}** updated.`, ephemeral: true });
+    } catch (err) {
+      console.error('editticketpanel error', err);
+      return interaction.followUp({ content: 'Timed out or error during edit.', ephemeral: true });
+    }
+  }
+
+  case 'rename': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: 'Manage Messages required.', ephemeral: true });
+    }
+    const tid = interaction.options.getString('ticket_id');
+    const newName = interaction.options.getString('name');
+    if (!tid || !newName) return interaction.reply({ content: 'Missing ticket_id or name.', ephemeral: true });
+
+    const gt = getGuildTickets(interaction.guildId);
+    const ticket = gt?.tickets?.[tid];
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+
+    const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
+    if (!ch || !ch.isTextBased()) return interaction.reply({ content: 'Ticket channel not available.', ephemeral: true });
+
+    await ch.setName(newName.slice(0, 90)).catch(()=>{});
+    return interaction.reply({ content: `Ticket ${tid} renamed to ${newName}.`, ephemeral: true });
+  }
+
+  case 'add': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: 'Manage Messages required.', ephemeral: true });
+    }
+    const tid = interaction.options.getString('ticket_id');
+    const target = interaction.options.getString('target');
+    const action = (interaction.options.getString('action') || '').toLowerCase();
+    if (!tid || !target || !action || !['add','remove'].includes(action)) return interaction.reply({ content: 'Usage: ticket_id, target, action add|remove', ephemeral: true });
+
+    const gt = getGuildTickets(interaction.guildId);
+    const ticket = gt?.tickets?.[tid];
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+
+    const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
+    if (!ch || !ch.isTextBased()) return interaction.reply({ content: 'Ticket channel not available.', ephemeral: true });
+
+    let targetId = null;
+    const userMention = target.match(/^<@!?(\d{17,19})>$/);
+    const roleMention = target.match(/^<@&?(\d{17,19})>$/);
+    const idMatch = target.match(/^\d{17,19}$/);
+    if (userMention) targetId = userMention[1];
+    else if (roleMention) targetId = roleMention[1];
+    else if (idMatch) targetId = idMatch[0];
+    else return interaction.reply({ content: 'Provide a valid user/role mention or ID.', ephemeral: true });
+
+    try {
+      if (action === 'add') {
+        await ch.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true }).catch(()=>{});
+        return interaction.reply({ content: `Added <@${targetId}> to ticket ${tid}.`, ephemeral: true });
+      } else {
+        await ch.permissionOverwrites.edit(targetId, { ViewChannel: false, SendMessages: false }).catch(()=>{});
+        return interaction.reply({ content: `Removed <@${targetId}> from ticket ${tid}.`, ephemeral: true });
+      }
+    } catch (err) {
+      console.error('add/remove ticket error', err);
+      return interaction.reply({ content: 'Failed to change permissions.', ephemeral: true });
+    }
+  }
+
+  case 'transcript': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: 'Manage Messages required.', ephemeral: true });
+    }
+    const tid = interaction.options.getString('ticket_id');
+    if (!tid) return interaction.reply({ content: 'ticket_id required.', ephemeral: true });
+    const gt = getGuildTickets(interaction.guildId);
+    const ticket = gt?.tickets?.[tid];
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+
+    const panel = gt.panels?.[ticket.panelId] || {};
+    const transcriptCh = panel.transcriptChannel || null;
+    if (!transcriptCh) return interaction.reply({ content: 'No transcript channel configured for this ticket/panel.', ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      await transcriptTicket(interaction.guildId, tid, transcriptCh);
+      return interaction.followUp({ content: `Transcript created for ticket ${tid}.`, ephemeral: true });
+    } catch (err) {
+      console.error('transcript error', err);
+      return interaction.followUp({ content: 'Failed to create transcript.', ephemeral: true });
+    }
+  }
+
+  case 'close': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: 'Manage Messages required', ephemeral: true });
+    }
+    const tid = interaction.options.getString('ticket_id');
+    if (!tid) return interaction.reply({ content: 'ticket_id required', ephemeral: true });
+
+    try {
+      const ch = await closeTicket(interaction.guildId, tid, true);
+      return interaction.reply({ content: `Ticket ${tid} closed: <#${ch.id}>`, ephemeral: true });
+    } catch (err) {
+      console.error(err);
+      return interaction.reply({ content: 'Failed to close ticket.', ephemeral: true });
+    }
+  }
+
+  case 'reopen': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: 'Manage Messages required', ephemeral: true });
+    }
+    const tid = interaction.options.getString('ticket_id');
+    if (!tid) return interaction.reply({ content: 'ticket_id required', ephemeral: true });
+
+    try {
+      const ch = await reopenTicket(interaction.guildId, tid);
+      return interaction.reply({ content: `Ticket ${tid} reopened: <#${ch.id}>`, ephemeral: true });
+    } catch (err) {
+      console.error(err);
+      return interaction.reply({ content: 'Failed to reopen ticket.', ephemeral: true });
+    }
+  }
+
+  case 'delete': {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: 'Manage Messages required', ephemeral: true });
+    }
+    const tid = interaction.options.getString('ticket_id');
+    if (!tid) return interaction.reply({ content: 'ticket_id required', ephemeral: true });
+
+    const gt = getGuildTickets(interaction.guildId);
+    const ticket = gt?.tickets?.[tid];
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+
+    try {
+      const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
+      if (ch && ch.deletable) await ch.delete().catch(()=>{});
+      delete gt.tickets[tid];
+      await saveTickets(interaction.guildId);
+      return interaction.reply({ content: `Ticket ${tid} channel deleted and record removed.`, ephemeral: true });
+    } catch (err) {
+      console.error('delete ticket error', err);
+      return interaction.reply({ content: 'Failed to delete ticket.', ephemeral: true });
+    }
+  }
       case 'verification': {
         if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return interaction.reply({ content: 'You need Administrator.', flags: 64 });
@@ -6359,8 +7045,57 @@ new SlashCommandBuilder()
     .addStringOption(option => 
         option.setName('new_prefix')
             .setDescription('The new prefix to set.')
-            .setRequired(true)
-    )
+            .setRequired(true)),
+new SlashCommandBuilder()
+  .setName('ticketpanel')
+  .setDescription('Create a ticket panel (interactive).')
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+new SlashCommandBuilder()
+  .setName('editticketpanel')
+  .setDescription('Edit an existing ticket panel (interactive).')
+  .addStringOption(opt => opt.setName('panel_id').setDescription('Panel ID to edit').setRequired(true))
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+new SlashCommandBuilder()
+  .setName('rename')
+  .setDescription('Rename a ticket.')
+  .addStringOption(o => o.setName('ticket_id').setDescription('Ticket id').setRequired(true))
+  .addStringOption(o => o.setName('name').setDescription('New name').setRequired(true))
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+
+new SlashCommandBuilder()
+  .setName('add')
+  .setDescription('Add or remove a user/role to/from a ticket.')
+  .addStringOption(o => o.setName('ticket_id').setDescription('Ticket id').setRequired(true))
+  .addStringOption(o => o.setName('target').setDescription('User mention / role id').setRequired(true))
+  .addStringOption(o => o.setName('action').setDescription('add|remove').setRequired(true))
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+
+new SlashCommandBuilder()
+  .setName('transcript')
+  .setDescription('Create and send a ticket transcript to configured log channel.')
+  .addStringOption(o => o.setName('ticket_id').setDescription('Ticket id').setRequired(true))
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+
+new SlashCommandBuilder()
+  .setName('close')
+  .setDescription('Close a ticket.')
+  .addStringOption(o => o.setName('ticket_id').setDescription('Ticket id').setRequired(true))
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+
+new SlashCommandBuilder()
+  .setName('reopen')
+  .setDescription('Reopen a closed ticket.')
+  .addStringOption(o => o.setName('ticket_id').setDescription('Ticket id').setRequired(true))
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+
+new SlashCommandBuilder()
+  .setName('delete')
+  .setDescription('Delete a ticket channel.')
+  .addStringOption(o => o.setName('ticket_id').setDescription('Ticket id').setRequired(true))
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+
 
 
 ].map(cmd => cmd.toJSON());
@@ -6379,6 +7114,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     await loadServerLoggingChannels();
     await cleanupExpiredVoidedCases();
     await loadImmunes();
+    await loadTickets();
     await cleanupExpiredCases();
     await loadSchedules();
     try {
