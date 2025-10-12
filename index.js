@@ -3767,7 +3767,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isModalSubmit && interaction.isModalSubmit()) {
   try {
     if (interaction.customId && interaction.customId.startsWith('ticketpanel_modal:')) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: 64 });
 
       const guildId = interaction.customId.split(':')[1] || interaction.guildId;
       const panelId = interaction.fields.getTextInputValue('panel_id').trim();
@@ -3812,7 +3812,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 
     if (interaction.customId && interaction.customId.startsWith('editticket_modal:')) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: 64 });
       const parts = interaction.customId.split(':');
       const guildId = parts[1] || interaction.guildId;
       const panelId = parts[2];
@@ -3854,7 +3854,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   } catch (err) {
     console.error('modal submit error', err);
-    try { if (!interaction.replied) await interaction.reply({ content: 'An error occurred processing the modal.', ephemeral: true }); } catch {}
+    try { if (!interaction.replied) await interaction.reply({ content: 'An error occurred processing the modal.', flags: 64 }); } catch {}
   }
 }
 
@@ -3862,7 +3862,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.commandName === 'reset') {
   if (interaction.user.id !== interaction.guild.ownerId)
-    return interaction.reply({ content: '❌ Only the **server owner** can use this command.', ephemeral: true });
+    return interaction.reply({ content: '❌ Only the **server owner** can use this command.', flags: 64 });
 
   const sub = interaction.options.getString('action');
   if (sub === 'authorize') {
@@ -3899,45 +3899,45 @@ client.on(Events.InteractionCreate, async (interaction) => {
 switch (commandName) {
   case 'ticketpanel': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return interaction.reply({ content: 'Administrator permission required.', ephemeral: true });
+      return interaction.reply({ content: 'Administrator permission required.', flags: 64 });
     }
 
-    await interaction.reply({ content: 'Let\'s create a ticket panel — respond in this channel. Reply `cancel` at any time to stop.\n1) Enter a short panel ID (alphanumeric):', ephemeral: true });
+    await interaction.reply({ content: 'Let\'s create a ticket panel — respond in this channel. Reply `cancel` at any time to stop.\n1) Enter a short panel ID (alphanumeric):', flags: 64 });
 
     const filter = m => m.author.id === interaction.user.id;
     const channelForCollector = interaction.channel;
     try {
       const collected1 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
       const idMsg = collected1.first();
-      if (!idMsg || idMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      if (!idMsg || idMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', flags: 64 });
 
       const panelId = idMsg.content.trim();
 
-      await interaction.followUp({ content: '2) Enter channel ID to send transcripts to, or `none` to skip:', ephemeral: true });
+      await interaction.followUp({ content: '2) Enter channel ID to send transcripts to, or `none` to skip:', flags: 64 });
       const collected2 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
       const chMsg = collected2.first();
-      if (!chMsg || chMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      if (!chMsg || chMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', flags: 64 });
       const transcriptChannel = (chMsg.content.toLowerCase() === 'none') ? null : chMsg.content.trim();
 
-      await interaction.followUp({ content: '3) Enter channel name template (e.g. `{ticket.id}-{user}`) or `default` for `{ticket.id}-{user}`:', ephemeral: true });
+      await interaction.followUp({ content: '3) Enter channel name template (e.g. `{ticket.id}-{user}`) or `default` for `{ticket.id}-{user}`:', flags: 64 });
       const collected3 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
       const nameMsg = collected3.first();
-      if (!nameMsg || nameMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      if (!nameMsg || nameMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', flags: 64 });
       const nameTemplate = (nameMsg.content.toLowerCase() === 'default' || !nameMsg.content.trim()) ? '{ticket.id}-{user}' : nameMsg.content.trim();
 
-      await interaction.followUp({ content: '4) (Optional) Enter allowed role IDs separated by spaces/commas (or `none`):', ephemeral: true });
+      await interaction.followUp({ content: '4) (Optional) Enter allowed role IDs separated by spaces/commas (or `none`):', flags: 64 });
       const collected4 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
       const rolesMsg = collected4.first();
-      if (!rolesMsg || rolesMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      if (!rolesMsg || rolesMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', flags: 64 });
       let allowedRoles = [];
       if (rolesMsg.content.toLowerCase() !== 'none') {
         allowedRoles = rolesMsg.content.match(/\d{17,19}/g) || [];
       }
 
-      await interaction.followUp({ content: '5) (Optional) Enter moderator role IDs separated by spaces/commas (or `none`):', ephemeral: true });
+      await interaction.followUp({ content: '5) (Optional) Enter moderator role IDs separated by spaces/commas (or `none`):', flags: 64 });
       const collected5 = await channelForCollector.awaitMessages({ filter, max: 1, time: 60000 });
       const modMsg = collected5.first();
-      if (!modMsg || modMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', ephemeral: true });
+      if (!modMsg || modMsg.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled panel creation.', flags: 64 });
       let moderators = [];
       if (modMsg.content.toLowerCase() !== 'none') {
         moderators = modMsg.content.match(/\d{17,19}/g) || [];
@@ -3965,49 +3965,49 @@ switch (commandName) {
       gt.panels[panelId].messageId = sent.id;
       await saveTickets(interaction.guildId);
 
-      return interaction.followUp({ content: `Panel **${panelId}** created and posted in this channel.`, ephemeral: true });
+      return interaction.followUp({ content: `Panel **${panelId}** created and posted in this channel.`, flags: 64 });
     } catch (err) {
       console.error('ticketpanel error', err);
-      return interaction.followUp({ content: 'Timed out or error during panel creation.', ephemeral: true });
+      return interaction.followUp({ content: 'Timed out or error during panel creation.', flags: 64 });
     }
   }
 
   case 'editticketpanel': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return interaction.reply({ content: 'Administrator permission required.', ephemeral: true });
+      return interaction.reply({ content: 'Administrator permission required.', flags: 64 });
     }
     const panelId = interaction.options.getString('panel_id');
     const gt = getGuildTickets(interaction.guildId);
     const panel = gt?.panels?.[panelId];
-    if (!panel) return interaction.reply({ content: 'Panel not found.', ephemeral: true });
+    if (!panel) return interaction.reply({ content: 'Panel not found.', flags: 64 });
 
-    await interaction.reply({ content: `Editing panel **${panelId}** — respond in this channel. Reply \`skip\` to keep a value, or \`cancel\` to abort.\n1) Channel name template (current: ${panel.channelName || '{ticket.id}-{user}'}):`, ephemeral: true });
+    await interaction.reply({ content: `Editing panel **${panelId}** — respond in this channel. Reply \`skip\` to keep a value, or \`cancel\` to abort.\n1) Channel name template (current: ${panel.channelName || '{ticket.id}-{user}'}):`, flags: 64 });
 
     const filter = m => m.author.id === interaction.user.id;
     try {
       const ch1 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
       const m1 = ch1.first();
-      if (!m1 || m1.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (!m1 || m1.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', flags: 64 });
       if (m1.content.toLowerCase() !== 'skip') panel.channelName = m1.content.trim();
 
-      await interaction.followUp({ content: `2) Transcript channel ID or \`none\` (current: ${panel.transcriptChannel || 'none'}):`, ephemeral: true });
+      await interaction.followUp({ content: `2) Transcript channel ID or \`none\` (current: ${panel.transcriptChannel || 'none'}):`, flags: 64 });
       const ch2 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
       const m2 = ch2.first();
-      if (!m2 || m2.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (!m2 || m2.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', flags: 64 });
       if (m2.content.toLowerCase() !== 'skip') panel.transcriptChannel = (m2.content.toLowerCase() === 'none') ? null : m2.content.trim();
 
-      await interaction.followUp({ content: '3) Allowed role IDs separated by spaces/commas, or `none`:', ephemeral: true });
+      await interaction.followUp({ content: '3) Allowed role IDs separated by spaces/commas, or `none`:', flags: 64 });
       const ch3 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
       const m3 = ch3.first();
-      if (!m3 || m3.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (!m3 || m3.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', flags: 64 });
       if (m3.content.toLowerCase() !== 'skip') {
         panel.allowedRoles = (m3.content.toLowerCase() === 'none') ? [] : (m3.content.match(/\d{17,19}/g) || []);
       }
 
-      await interaction.followUp({ content: '4) Moderator role IDs separated by spaces/commas, or `none`:', ephemeral: true });
+      await interaction.followUp({ content: '4) Moderator role IDs separated by spaces/commas, or `none`:', flags: 64 });
       const ch4 = await interaction.channel.awaitMessages({ filter, max: 1, time: 60000 });
       const m4 = ch4.first();
-      if (!m4 || m4.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', ephemeral: true });
+      if (!m4 || m4.content.toLowerCase() === 'cancel') return interaction.followUp({ content: 'Cancelled edit.', flags: 64 });
       if (m4.content.toLowerCase() !== 'skip') {
         panel.moderators = (m4.content.toLowerCase() === 'none') ? [] : (m4.content.match(/\d{17,19}/g) || []);
       }
@@ -4028,47 +4028,47 @@ switch (commandName) {
         } catch {}
       }
 
-      return interaction.followUp({ content: `Panel **${panelId}** updated.`, ephemeral: true });
+      return interaction.followUp({ content: `Panel **${panelId}** updated.`, flags: 64 });
     } catch (err) {
       console.error('editticketpanel error', err);
-      return interaction.followUp({ content: 'Timed out or error during edit.', ephemeral: true });
+      return interaction.followUp({ content: 'Timed out or error during edit.', flags: 64 });
     }
   }
 
   case 'rename': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-      return interaction.reply({ content: 'Manage Messages required.', ephemeral: true });
+      return interaction.reply({ content: 'Manage Messages required.', flags: 64 });
     }
     const tid = interaction.options.getString('ticket_id');
     const newName = interaction.options.getString('name');
-    if (!tid || !newName) return interaction.reply({ content: 'Missing ticket_id or name.', ephemeral: true });
+    if (!tid || !newName) return interaction.reply({ content: 'Missing ticket_id or name.', flags: 64 });
 
     const gt = getGuildTickets(interaction.guildId);
     const ticket = gt?.tickets?.[tid];
-    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', flags: 64 });
 
     const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
-    if (!ch || !ch.isTextBased()) return interaction.reply({ content: 'Ticket channel not available.', ephemeral: true });
+    if (!ch || !ch.isTextBased()) return interaction.reply({ content: 'Ticket channel not available.', flags: 64 });
 
     await ch.setName(newName.slice(0, 90)).catch(()=>{});
-    return interaction.reply({ content: `Ticket ${tid} renamed to ${newName}.`, ephemeral: true });
+    return interaction.reply({ content: `Ticket ${tid} renamed to ${newName}.`, flags: 64 });
   }
 
   case 'add': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-      return interaction.reply({ content: 'Manage Messages required.', ephemeral: true });
+      return interaction.reply({ content: 'Manage Messages required.', flags: 64 });
     }
     const tid = interaction.options.getString('ticket_id');
     const target = interaction.options.getString('target');
     const action = (interaction.options.getString('action') || '').toLowerCase();
-    if (!tid || !target || !action || !['add','remove'].includes(action)) return interaction.reply({ content: 'Usage: ticket_id, target, action add|remove', ephemeral: true });
+    if (!tid || !target || !action || !['add','remove'].includes(action)) return interaction.reply({ content: 'Usage: ticket_id, target, action add|remove', flags: 64 });
 
     const gt = getGuildTickets(interaction.guildId);
     const ticket = gt?.tickets?.[tid];
-    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', flags: 64 });
 
     const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
-    if (!ch || !ch.isTextBased()) return interaction.reply({ content: 'Ticket channel not available.', ephemeral: true });
+    if (!ch || !ch.isTextBased()) return interaction.reply({ content: 'Ticket channel not available.', flags: 64 });
 
     let targetId = null;
     const userMention = target.match(/^<@!?(\d{17,19})>$/);
@@ -4077,98 +4077,98 @@ switch (commandName) {
     if (userMention) targetId = userMention[1];
     else if (roleMention) targetId = roleMention[1];
     else if (idMatch) targetId = idMatch[0];
-    else return interaction.reply({ content: 'Provide a valid user/role mention or ID.', ephemeral: true });
+    else return interaction.reply({ content: 'Provide a valid user/role mention or ID.', flags: 64 });
 
     try {
       if (action === 'add') {
         await ch.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true }).catch(()=>{});
-        return interaction.reply({ content: `Added <@${targetId}> to ticket ${tid}.`, ephemeral: true });
+        return interaction.reply({ content: `Added <@${targetId}> to ticket ${tid}.`, flags: 64 });
       } else {
         await ch.permissionOverwrites.edit(targetId, { ViewChannel: false, SendMessages: false }).catch(()=>{});
-        return interaction.reply({ content: `Removed <@${targetId}> from ticket ${tid}.`, ephemeral: true });
+        return interaction.reply({ content: `Removed <@${targetId}> from ticket ${tid}.`, flags: 64 });
       }
     } catch (err) {
       console.error('add/remove ticket error', err);
-      return interaction.reply({ content: 'Failed to change permissions.', ephemeral: true });
+      return interaction.reply({ content: 'Failed to change permissions.', flags: 64 });
     }
   }
 
   case 'transcript': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-      return interaction.reply({ content: 'Manage Messages required.', ephemeral: true });
+      return interaction.reply({ content: 'Manage Messages required.', flags: 64 });
     }
     const tid = interaction.options.getString('ticket_id');
-    if (!tid) return interaction.reply({ content: 'ticket_id required.', ephemeral: true });
+    if (!tid) return interaction.reply({ content: 'ticket_id required.', flags: 64 });
     const gt = getGuildTickets(interaction.guildId);
     const ticket = gt?.tickets?.[tid];
-    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', flags: 64 });
 
     const panel = gt.panels?.[ticket.panelId] || {};
     const transcriptCh = panel.transcriptChannel || null;
-    if (!transcriptCh) return interaction.reply({ content: 'No transcript channel configured for this ticket/panel.', ephemeral: true });
+    if (!transcriptCh) return interaction.reply({ content: 'No transcript channel configured for this ticket/panel.', flags: 64 });
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 });
     try {
       await transcriptTicket(interaction.guildId, tid, transcriptCh);
-      return interaction.followUp({ content: `Transcript created for ticket ${tid}.`, ephemeral: true });
+      return interaction.followUp({ content: `Transcript created for ticket ${tid}.`, flags: 64 });
     } catch (err) {
       console.error('transcript error', err);
-      return interaction.followUp({ content: 'Failed to create transcript.', ephemeral: true });
+      return interaction.followUp({ content: 'Failed to create transcript.', flags: 64 });
     }
   }
 
   case 'close': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-      return interaction.reply({ content: 'Manage Messages required', ephemeral: true });
+      return interaction.reply({ content: 'Manage Messages required', flags: 64 });
     }
     const tid = interaction.options.getString('ticket_id');
-    if (!tid) return interaction.reply({ content: 'ticket_id required', ephemeral: true });
+    if (!tid) return interaction.reply({ content: 'ticket_id required', flags: 64 });
 
     try {
       const ch = await closeTicket(interaction.guildId, tid, true);
-      return interaction.reply({ content: `Ticket ${tid} closed: <#${ch.id}>`, ephemeral: true });
+      return interaction.reply({ content: `Ticket ${tid} closed: <#${ch.id}>`, flags: 64 });
     } catch (err) {
       console.error(err);
-      return interaction.reply({ content: 'Failed to close ticket.', ephemeral: true });
+      return interaction.reply({ content: 'Failed to close ticket.', flags: 64 });
     }
   }
 
   case 'reopen': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-      return interaction.reply({ content: 'Manage Messages required', ephemeral: true });
+      return interaction.reply({ content: 'Manage Messages required', flags: 64 });
     }
     const tid = interaction.options.getString('ticket_id');
-    if (!tid) return interaction.reply({ content: 'ticket_id required', ephemeral: true });
+    if (!tid) return interaction.reply({ content: 'ticket_id required', flags: 64 });
 
     try {
       const ch = await reopenTicket(interaction.guildId, tid);
-      return interaction.reply({ content: `Ticket ${tid} reopened: <#${ch.id}>`, ephemeral: true });
+      return interaction.reply({ content: `Ticket ${tid} reopened: <#${ch.id}>`, flags: 64 });
     } catch (err) {
       console.error(err);
-      return interaction.reply({ content: 'Failed to reopen ticket.', ephemeral: true });
+      return interaction.reply({ content: 'Failed to reopen ticket.', flags: 64 });
     }
   }
 
   case 'delete': {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-      return interaction.reply({ content: 'Manage Messages required', ephemeral: true });
+      return interaction.reply({ content: 'Manage Messages required', flags: 64 });
     }
     const tid = interaction.options.getString('ticket_id');
-    if (!tid) return interaction.reply({ content: 'ticket_id required', ephemeral: true });
+    if (!tid) return interaction.reply({ content: 'ticket_id required', flags: 64 });
 
     const gt = getGuildTickets(interaction.guildId);
     const ticket = gt?.tickets?.[tid];
-    if (!ticket) return interaction.reply({ content: 'Ticket not found.', ephemeral: true });
+    if (!ticket) return interaction.reply({ content: 'Ticket not found.', flags: 64 });
 
     try {
       const ch = await client.channels.fetch(ticket.channelId).catch(()=>null);
       if (ch && ch.deletable) await ch.delete().catch(()=>{});
       delete gt.tickets[tid];
       await saveTickets(interaction.guildId);
-      return interaction.reply({ content: `Ticket ${tid} channel deleted and record removed.`, ephemeral: true });
+      return interaction.reply({ content: `Ticket ${tid} channel deleted and record removed.`, flags: 64 });
     } catch (err) {
       console.error('delete ticket error', err);
-      return interaction.reply({ content: 'Failed to delete ticket.', ephemeral: true });
+      return interaction.reply({ content: 'Failed to delete ticket.', flags: 64 });
     }
   }
       case 'verification': {
@@ -5245,7 +5245,7 @@ case 'infract': {
 
 case 'reset': {
   if (interaction.user.id !== interaction.guild.ownerId) {
-    return interaction.reply({ content: '❌ Only the **server owner** can use this command.', ephemeral: true });
+    return interaction.reply({ content: '❌ Only the **server owner** can use this command.', flags: 64 });
   }
 
   const sub = interaction.options.getString('action');
