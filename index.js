@@ -6418,7 +6418,8 @@ client.once(Events.ClientReady, async (readyClient) => {
 **After *a brief debug testing session*, no errors have been found.**
 
 ## Updates;
-- added 'reset' command, along with removing embed for commands "remind" and "schedule".
+- memory upgrage; 8gb -> 16gb
+- minor optimizations and bug fixes
 
 If you find an error, please open a <#1376450603068166165> ticket.
 Date of last startup: <t:${Math.floor(Date.now() / 1000)}:F>
