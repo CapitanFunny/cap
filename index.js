@@ -1959,7 +1959,7 @@ const safeIcon = guild?.iconURL?.({ dynamic: true, size: 1024 }) || null;
 
 const embed = new EmbedBuilder()
   .setColor(0xFFFFFF)
-  .setTitle(`Server Info — ${safeGuildName}`)
+  .setTitle('Server Info')
   .setThumbnail(safeIcon)
   .addFields(
     { name: 'Server Name', value: safeGuildName, inline: true },
@@ -4051,7 +4051,7 @@ const safeIcon = guild?.iconURL?.({ dynamic: true, size: 1024 }) || null;
 
 const embed = new EmbedBuilder()
   .setColor(0xFFFFFF)
-  .setTitle(`Server Info — ${safeGuildName}`)
+  .setTitle('Server Info')
   .setThumbnail(safeIcon)
   .addFields(
     { name: 'Server Name', value: safeGuildName, inline: true },
