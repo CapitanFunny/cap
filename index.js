@@ -1262,8 +1262,26 @@ async function cleanupExpiredCases(guildId = null) {
       }
     }
   }
+ if (cleaned > 0) {
+    await saveCasesToFile(guildId);
+    console.log(`Cleaned up ${cleaned} expired cases ${guildId ? `for guild ${guildId}` : ''}`);
+  }
 }
-  function parseDuration(input) {
+function getActiveCases(userId, guildId) {
+  const activeCases = [];
+  for (const [caseId, moderationCase] of moderationCases) {
+    if (moderationCase.target === userId && 
+        moderationCase.guildId === guildId && 
+        !moderationCase.voided && 
+        !moderationCase.appealed &&
+        !isCaseExpired(moderationCase)) {
+      activeCases.push({ caseId, ...moderationCase });
+    }
+  }
+  return activeCases;
+}
+
+ function parseDuration(input) {
   if (!input) return null;
 
   const match = String(input).trim().match(/^(\d+)\s*(s|m|h|d|w|mo|y)?$/i);
@@ -1283,26 +1301,6 @@ async function cleanupExpiredCases(guildId = null) {
   };
 
   return value * (multipliers[unit] || multipliers.m);
-}
-
-
-  if (cleaned > 0) {
-    await saveCasesToFile(guildId);
-    console.log(`Cleaned up ${cleaned} expired cases ${guildId ? `for guild ${guildId}` : ''}`);
-  }
-}
-function getActiveCases(userId, guildId) {
-  const activeCases = [];
-  for (const [caseId, moderationCase] of moderationCases) {
-    if (moderationCase.target === userId && 
-        moderationCase.guildId === guildId && 
-        !moderationCase.voided && 
-        !moderationCase.appealed &&
-        !isCaseExpired(moderationCase)) {
-      activeCases.push({ caseId, ...moderationCase });
-    }
-  }
-  return activeCases;
 }
 
 
