@@ -1132,24 +1132,28 @@ async function resetGuildData(guildId) {
 }
 
 function addReminder(guildId, reminder) {
-  const list = getGuildReminders(guildId);
-  list.push(reminder);
+  const gid = String(guildId);
+  if (!reminders.has(gid)) reminders.set(gid, []);
+  reminders.get(gid).push(reminder);
 }
 
 function removeReminder(guildId, reminderId) {
-  const list = getGuildReminders(guildId);
-  const idx = list.findIndex(r => r.id === reminderId);
-  if (idx !== -1) list.splice(idx, 1);
-}
-
-function clearReminders(guildId) {
-  reminders.delete(guildId);
+  const gid = String(guildId);
+  if (!reminders.has(gid)) return false;
+  const arr = reminders.get(gid);
+  const idx = arr.findIndex(r => r.id === reminderId);
+  if (idx === -1) return false;
+  arr.splice(idx, 1);
+  if (arr.length === 0) reminders.delete(gid);
+  return true;
 }
 
 function getGuildReminders(guildId) {
-  if (!reminders.has(guildId)) reminders.set(guildId, []);
-  return reminders.get(guildId);
+  const gid = String(guildId);
+  if (!reminders.has(gid)) reminders.set(gid, []);
+  return reminders.get(gid);
 }
+
 function getGuildImmunes(guildId) {
   const obj = serverImmunes.get(String(guildId));
   if (!obj) {
@@ -2803,19 +2807,18 @@ case 'remind': {
   };
 
   addReminder(message.guild.id, reminder);
+if (remindTime <= Date.now() + WORKER_INTERVAL_MS) {
+  try {
+    await message.author.send(`🔔 Reminder: ${text}`);
+    removeReminder(message.guild.id, reminderId);
+  } catch (err) { console.error(err); }
+  return;
+}
 
   await message.reply(
     `<a:y1:1415173658237866025> Reminder set! I'll remind you in <t:${Math.floor(remindTime / 1000)}:R>.\n**ID:** \`${reminderId}\``
   );
 
-  setTimeout(async () => {
-    try {
-      await message.author.send(`<:a_2:1415171126560165928> Reminder: ${text}`);
-      removeReminder(message.guild.id, reminderId);
-    } catch (err) {
-      console.error('Failed to DM reminder:', err);
-    }
-  }, ms);
   break;
 }
 
@@ -2863,14 +2866,6 @@ case 'remindchange': {
     `<a:y1:1415173658237866025> Reminder \`${reminderId}\` updated! I'll remind you in <t:${Math.floor(reminder.timestamp / 1000)}:R>.`
   );
 
-  setTimeout(async () => {
-    try {
-      await message.author.send(`<:a_2:1415171126560165928> Reminder: ${reminder.text}`);
-      removeReminder(message.guild.id, reminderId);
-    } catch (err) {
-      console.error('Failed to DM reminder:', err);
-    }
-  }, ms);
   break;
 }
 case 'remindlist': {
@@ -3840,20 +3835,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const reminder = { id: reminderId, userId: user.id, text, timestamp: remindTime };
       addReminder(guild.id, reminder);
+if (remindTime <= Date.now() + WORKER_INTERVAL_MS) {
+  try {
+    await message.author.send(`🔔 Reminder: ${text}`);
+    removeReminder(message.guild.id, reminderId);
+  } catch (err) { console.error(err); }
+  return;
+}
 
       await interaction.reply({
         content: `<a:y1:1415173658237866025> Reminder set! I'll remind you in <t:${Math.floor(remindTime / 1000)}:R>.\n**ID:** \`${reminderId}\``,
         flags: 64
       });
-
-      setTimeout(async () => {
-        try {
-          await user.send(`<:a_2:1415171126560165928> Reminder: ${text}`);
-          removeReminder(guild.id, reminderId);
-        } catch (err) {
-          console.error('Failed to DM reminder:', err);
-        }
-      }, ms);
       break;
     }
 
@@ -6489,6 +6482,44 @@ setInterval(async () => {
     }
   }
 }, 30_000);
+
+const WORKER_INTERVAL_MS = 5000;
+
+function startReminderWorker() {
+  if (reminderWorker) return;
+  reminderWorker = setInterval(async () => {
+    try {
+      const now = Date.now();
+      for (const [guildId, list] of Array.from(reminders.entries())) {
+        // iterate over a copy to avoid mutation issues
+        for (const rem of [...list]) {
+          if (!rem || !rem.timestamp) continue;
+          if (rem.timestamp <= now) {
+            try {
+              const user = await client.users.fetch(rem.userId).catch(() => null);
+              if (user) {
+                await user.send(`🔔 Reminder: ${rem.text}`).catch(() => {});
+              }
+            } catch (err) {
+              console.error('Reminder delivery error:', err);
+            }
+            // remove it whether send succeeded or not
+            removeReminder(guildId, rem.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Reminder worker error:', err);
+    }
+  }, WORKER_INTERVAL_MS);
+}
+
+function stopReminderWorker() {
+  if (!reminderWorker) return;
+  clearInterval(reminderWorker);
+  reminderWorker = null;
+}
+
 
 });
 
