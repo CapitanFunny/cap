@@ -1004,6 +1004,30 @@ function guildSchedulesPath(guildId) {
 }
 
 
+function parseDuration(input) {
+  if (!input || typeof input !== 'string') return null;
+
+  input = input.trim().toLowerCase();
+
+  const match = input.match(/^(\d+(?:\.\d+)?)(s|m|h|d|w|mo|y)?$/);
+  if (!match) return null;
+
+  const value = parseFloat(match[1]);
+  const unit = match[2] || 'm';
+
+  const multipliers = {
+    s: 1000,                     
+    m: 1000 * 60,                
+    h: 1000 * 60 * 60,           
+    d: 1000 * 60 * 60 * 24,      
+    w: 1000 * 60 * 60 * 24 * 7,  
+    mo: 1000 * 60 * 60 * 24 * 30,
+    y: 1000 * 60 * 60 * 24 * 365
+  };
+
+  return Math.floor(value * (multipliers[unit] || multipliers.m));
+}
+
 
 async function loadSchedules() {
   await ensureRoot();
@@ -2416,11 +2440,12 @@ if (caseData.type === 'ban') {
     return await message.reply('Usage: `!schedulemsg #channel [time] {message}`');
   }
 
-  const minutes = parseInt(timeStr);
-  if (isNaN(minutes) || minutes <= 0) {
-    return await message.reply('Time must be a positive number of minutes.');
-  }
-  const sendAt = Date.now() + minutes * 60_000;
+  const ms = parseDuration(newTimeStr);
+if (!ms || ms < 1000) {
+  return await message.reply('⚠️ Invalid duration. Use examples: `10s`, `5m`, `1h`, `2d`, `1w`, `1mo`.');
+}
+
+schedule.time = Date.now() + ms;
 
   const schedules = getGuildSchedules(guildId);
   const id = Date.now().toString();
@@ -4512,10 +4537,16 @@ case 'infract': {
   break;
 }
 
-        case 'schedulemsg': {
+case 'schedulemsg':
+case 'schedule' {
   const channel = interaction.options.getChannel('channel');
-  const minutes = interaction.options.getInteger('time');
-  const content = interaction.options.getString('content');
+  const newTimeStr = interaction.options.getString('time'); // or 'duration'
+const ms = parseDuration(newTimeStr);
+if (!ms || ms < 1000) {
+  return await interaction.reply({ content: '⚠️ Invalid duration. Use `10m`, `1h`, etc.', flags: 64 });
+}
+schedule.time = Date.now() + ms;
+const content = interaction.options.getString('content');
 
   if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
     return await interaction.reply({ content: 'You need Manage Messages permission.', flags: 64 });
@@ -6034,12 +6065,11 @@ new SlashCommandBuilder()
       option.setName('user')
         .setDescription('The user to mute')
         .setRequired(true))
-    .addIntegerOption(option =>
+    .addStringOption(option =>
       option.setName('duration')
-        .setDescription('Duration in minutes')
-        .setRequired(true)
-        .setMinValue(1)
-        .setMaxValue(40320))
+     .setDescription('Duration (e.g. 10m, 1h, 2d). Accepts s/m/h/d/w/mo/y')
+     .setRequired(true))
+
     .addStringOption(option =>
       option.setName('reason')
         .setDescription('Reason for the mute')
@@ -6117,11 +6147,10 @@ new SlashCommandBuilder()
     opt.setName('channel')
       .setDescription('Channel to send the message in')
       .setRequired(true))
-  .addIntegerOption(opt =>
-    opt.setName('time')
-      .setDescription('Time in minutes from now')
-      .setRequired(true)
-      .setMinValue(1))
+  .addStringOption(opt =>
+  opt.setName('time')
+     .setDescription('Duration (e.g. 10m, 1h, 2d). Accepts s/m/h/d/w/mo/y')
+     .setRequired(true))
   .addStringOption(opt =>
     opt.setName('content')
       .setDescription('Message content to send')
@@ -6135,10 +6164,11 @@ new SlashCommandBuilder()
     opt.setName('user')
       .setDescription('Filter: delete schedules from this user')
       .setRequired(false))
-  .addIntegerOption(opt =>
-    opt.setName('time')
-      .setDescription('Filter: only delete schedules before this many minutes from now')
-      .setRequired(false)),
+  .addStringOption(opt =>
+  opt.setName('time')
+     .setDescription('Duration (e.g. 10m, 1h, 2d). Accepts s/m/h/d/w/mo/y / deletes messages from the time stated')
+     .setRequired(true))
+
 
 new SlashCommandBuilder()
   .setName('schedulelist')
@@ -6218,11 +6248,10 @@ new SlashCommandBuilder()
   new SlashCommandBuilder()
   .setName('remindme')
   .setDescription('Set a reminder for yourself')
-  .addIntegerOption(opt =>
-    opt.setName('time')
-      .setDescription('Time in minutes from now')
-      .setRequired(true)
-      .setMinValue(1))
+  .addStringOption(opt =>
+  opt.setName('time')
+     .setDescription('Duration (e.g. 10m, 1h, 2d). Accepts s/m/h/d/w/mo/y')
+     .setRequired(true))
   .addStringOption(opt =>
     opt.setName('content')
       .setDescription('What to remind you about')
@@ -6243,11 +6272,10 @@ new SlashCommandBuilder()
     opt.setName('id')
       .setDescription('The reminder ID to change')
       .setRequired(true))
-  .addIntegerOption(opt =>
-    opt.setName('time')
-      .setDescription('New time in minutes from now')
-      .setRequired(true)
-      .setMinValue(1))
+  .addStringOption(opt =>
+  opt.setName('time')
+     .setDescription('Duration (e.g. 10m, 1h, 2d). Accepts s/m/h/d/w/mo/y')
+     .setRequired(true))
   .addStringOption(opt =>
     opt.setName('content')
       .setDescription('New reminder text')
