@@ -1050,6 +1050,28 @@ async function setUserAFK(member, reason) {
   }
 }
 
+ function parseDuration(input) {
+  if (!input) return null;
+
+  const match = String(input).trim().match(/^(\d+)\s*(s|m|h|d|w|mo|y)?$/i);
+  if (!match) return null;
+
+  const value = parseInt(match[1], 10);
+  const unit = (match[2] || 'm').toLowerCase();
+
+  const multipliers = {
+    s: 1000,
+    m: 1000 * 60,
+    h: 1000 * 60 * 60,
+    d: 1000 * 60 * 60 * 24,
+    w: 1000 * 60 * 60 * 24 * 7,
+    mo: 1000 * 60 * 60 * 24 * 30,
+    y: 1000 * 60 * 60 * 24 * 365
+  };
+
+  return value * (multipliers[unit] || multipliers.m);
+}
+
 
 function guildImmunesPath(guildId) {
   return path.join(guildFolder(guildId), 'immunes.json');
@@ -1281,27 +1303,6 @@ function getActiveCases(userId, guildId) {
   return activeCases;
 }
 
- function parseDuration(input) {
-  if (!input) return null;
-
-  const match = String(input).trim().match(/^(\d+)\s*(s|m|h|d|w|mo|y)?$/i);
-  if (!match) return null;
-
-  const value = parseInt(match[1], 10);
-  const unit = (match[2] || 'm').toLowerCase();
-
-  const multipliers = {
-    s: 1000,
-    m: 1000 * 60,
-    h: 1000 * 60 * 60,
-    d: 1000 * 60 * 60 * 24,
-    w: 1000 * 60 * 60 * 24 * 7,
-    mo: 1000 * 60 * 60 * 24 * 30,
-    y: 1000 * 60 * 60 * 24 * 365
-  };
-
-  return value * (multipliers[unit] || multipliers.m);
-}
 
 
 setInterval(() => cleanupExpiredCases(), 12 * 60 * 60 * 1000);
