@@ -4538,7 +4538,7 @@ case 'infract': {
 }
 
 case 'schedulemsg':
-case 'schedule' {
+case 'schedule': {
   const channel = interaction.options.getChannel('channel');
   const newTimeStr = interaction.options.getString('time'); // or 'duration'
 const ms = parseDuration(newTimeStr);
