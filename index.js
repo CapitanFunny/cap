@@ -6153,14 +6153,14 @@ new SlashCommandBuilder()
   .setName('scheduledel')
   .setDescription('Delete scheduled messages')
   .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
-  .addUserOption(opt =>
-    opt.setName('user')
-      .setDescription('Filter: delete schedules from this user')
-      .setRequired(false))
   .addStringOption(opt =>
   opt.setName('time')
      .setDescription('Duration (e.g. 10m, 1h, 2d). Accepts s/m/h/d/w/mo/y / deletes messages from the time stated')
      .setRequired(true)),
+  .addUserOption(opt =>
+    opt.setName('user')
+      .setDescription('Filter: delete schedules from this user')
+      .setRequired(false)),
 
 
 new SlashCommandBuilder()
