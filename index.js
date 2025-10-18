@@ -1262,7 +1262,7 @@ async function cleanupExpiredCases(guildId = null) {
       }
     }
   }
-
+}
   function parseDuration(input) {
   if (!input) return null;
 
