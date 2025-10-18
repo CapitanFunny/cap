@@ -1003,6 +1003,8 @@ function guildSchedulesPath(guildId) {
   return path.join(guildFolder(guildId), 'schedules.json');
 }
 
+
+
 async function loadSchedules() {
   await ensureRoot();
   scheduledMessages = new Map();
@@ -1050,28 +1052,6 @@ async function setUserAFK(member, reason) {
   }
 }
 
- function parseDuration(input) {
-  if (!input) return null;
-
-  const match = String(input).trim().match(/^(\d+)\s*(s|m|h|d|w|mo|y)?$/i);
-  if (!match) return null;
-
-  const value = parseInt(match[1], 10);
-  const unit = (match[2] || 'm').toLowerCase();
-
-  const multipliers = {
-    s: 1000,
-    m: 1000 * 60,
-    h: 1000 * 60 * 60,
-    d: 1000 * 60 * 60 * 24,
-    w: 1000 * 60 * 60 * 24 * 7,
-    mo: 1000 * 60 * 60 * 24 * 30,
-    y: 1000 * 60 * 60 * 24 * 365
-  };
-
-  return value * (multipliers[unit] || multipliers.m);
-}
-
 
 function guildImmunesPath(guildId) {
   return path.join(guildFolder(guildId), 'immunes.json');
@@ -1106,23 +1086,6 @@ function guildRemindersPath(guildId) {
   return path.join(guildFolder(guildId), 'reminders.json');
 }
 
-async function loadReminders() {
-  await ensureRoot();
-  reminders = new Map();
-  const entries = await fsp.readdir(GUILD_CONFIG_ROOT, { withFileTypes: true }).catch(() => []);
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    const gid = e.name.startsWith('guild_') ? e.name.slice(6) : e.name;
-    const obj = (await readJsonFileNullable(guildRemindersPath(gid))) || [];
-    reminders.set(gid, obj);
-  }
-}
-
-async function saveReminders(guildId) {
-  const arr = reminders.get(String(guildId)) || [];
-  await ensureGuildFolder(guildId);
-  await writeJsonFile(guildRemindersPath(guildId), arr);
-}
 
 async function resetGuildData(guildId) {
   try {
@@ -1134,7 +1097,6 @@ async function resetGuildData(guildId) {
     serverLoggingChannels.delete(guildId);
     serverAutomodConfig.delete(guildId);
     serverImmunes.delete(guildId);
-    reminders.delete(guildId);
     scheduledMessages.delete(guildId);
 
     console.log(`✅ Guild data reset for ${guildId}`);
@@ -1145,13 +1107,24 @@ async function resetGuildData(guildId) {
   }
 }
 
+function addReminder(guildId, reminder) {
+  const list = getGuildReminders(guildId);
+  list.push(reminder);
+}
+
+function removeReminder(guildId, reminderId) {
+  const list = getGuildReminders(guildId);
+  const idx = list.findIndex(r => r.id === reminderId);
+  if (idx !== -1) list.splice(idx, 1);
+}
+
+function clearReminders(guildId) {
+  reminders.delete(guildId);
+}
+
 function getGuildReminders(guildId) {
-  const arr = reminders.get(String(guildId));
-  if (!arr) {
-    reminders.set(String(guildId), []);
-    return [];
-  }
-  return arr;
+  if (!reminders.has(guildId)) reminders.set(guildId, []);
+  return reminders.get(guildId);
 }
 function getGuildImmunes(guildId) {
   const obj = serverImmunes.get(String(guildId));
@@ -2781,105 +2754,116 @@ if (!banTarget) return await message.reply('<:a_2:1415171126560165928> Please pr
         await message.reply(`<a:y1:1415173658237866025> ${banTarget.tag} has been banned. Case ID: \`${banCaseId}\``);
         break;
 
-    case 'remindme':
+case 'remindme':
 case 'remind': {
-  const timeInput = args.shift();
-  const reminderText = args.join(' ');
-
-  if (!timeInput || !reminderText) {
-    return await message.reply('⚠️ Usage: `!remindme <duration> <message>`\nExample: `!remindme 10m Take a break`');
+  const duration = args.shift();
+  const text = args.join(' ');
+  if (!duration || !text) {
+    return await message.reply('<:a_2:1415171126560165928> Usage: `!remindme <minutes> <text>`');
   }
 
-  const delayMs = parseDuration(timeInput);
-  if (!delayMs || delayMs < 1000) {
-    return await message.reply('⚠️ Invalid time format. Use formats like `10m`, `1h`, `2d`, `1w`, etc.');
+  const ms = parseDuration(duration);
+  if (!ms || ms < 10000) {
+    return await message.reply('<:a_2:1415171126560165928> Duration must be at least 10 seconds.');
   }
 
-  const remindAt = Date.now() + delayMs;
+  const reminderId = Math.random().toString(36).slice(2, 8);
+  const remindTime = Date.now() + ms;
 
-  if (!reminders.has(message.guild.id)) reminders.set(message.guild.id, []);
-  const guildReminders = reminders.get(message.guild.id);
-  guildReminders.push({
+  const reminder = {
+    id: reminderId,
     userId: message.author.id,
-    guildId: message.guild.id,
-    message: reminderText,
-    time: remindAt,
-  });
+    text,
+    timestamp: remindTime
+  };
 
-  await saveRemindersToFile(message.guild.id);
+  addReminder(message.guild.id, reminder);
 
-  const when = `<t:${Math.floor(remindAt / 1000)}:R>`;
-  await message.reply(`✅ Got it! I'll remind you **${when}** about: "${reminderText}"`);
+  await message.reply(
+    `<a:y1:1415173658237866025> Reminder set! I'll remind you in <t:${Math.floor(remindTime / 1000)}:R>.\n**ID:** \`${reminderId}\``
+  );
+
+  setTimeout(async () => {
+    try {
+      await message.author.send(`<:a_2:1415171126560165928> Reminder: ${text}`);
+      removeReminder(message.guild.id, reminderId);
+    } catch (err) {
+      console.error('Failed to DM reminder:', err);
+    }
+  }, ms);
   break;
 }
 
 
 case 'reminddel': {
-  const id = args[0];
-  if (!id) {
-    return await message.reply('Usage: `!reminddel {reminderId}`');
+  const reminderId = args[0];
+  if (!reminderId) {
+    return await message.reply('<:a_2:1415171126560165928> Usage: `!reminddel <reminderId>`');
   }
 
-  let arr = getGuildReminders(guildId);
-  const before = arr.length;
-  arr = arr.filter(r => !(r.id === id && r.userId === message.author.id));
-  reminders.set(guildId, arr);
-  await saveReminders(guildId);
-
-  if (arr.length === before) {
-    return await message.reply('<:a_2:1415171126560165928> No reminder found with that ID (or it’s not yours).');
-  } else {
-    return await message.reply(`<a:y1:1415173658237866025> Reminder \`${id}\` deleted.`);
+  const list = getGuildReminders(message.guild.id);
+  const reminder = list.find(r => r.id === reminderId && r.userId === message.author.id);
+  if (!reminder) {
+    return await message.reply('<:a_2:1415171126560165928> Reminder not found.');
   }
+
+  removeReminder(message.guild.id, reminderId);
+  await message.reply(`<a:y1:1415173658237866025> Reminder \`${reminderId}\` deleted.`);
+  break;
 }
 case 'remindchange': {
-  const id = args.shift();
-  const newTimeStr = args.shift();
-  const newContent = args.join(' ');
+  const reminderId = args.shift();
+  const newDuration = args.shift();
+  const newText = args.join(' ');
 
-  if (!id || !newTimeStr || !newContent) {
-    return await message.reply('Usage: `!remindchange {reminderId} {newTimeInMinutes} {newReminderText}`');
+  if (!reminderId || !newDuration || !newText) {
+    return await message.reply('<:a_2:1415171126560165928> Usage: `!remindchange <reminderId> <minutes> <new text>`');
   }
 
-  const minutes = parseInt(newTimeStr);
-  if (isNaN(minutes) || minutes <= 0) {
-    return await message.reply('Time must be a positive number of minutes.');
-  }
-
-  const arr = getGuildReminders(guildId);
-  const reminder = arr.find(r => r.id === id && r.userId === message.author.id);
+  const list = getGuildReminders(message.guild.id);
+  const reminder = list.find(r => r.id === reminderId && r.userId === message.author.id);
   if (!reminder) {
-    return await message.reply('<:a_2:1415171126560165928> No reminder found with that ID (or it’s not yours).');
+    return await message.reply('<:a_2:1415171126560165928> Reminder not found.');
   }
 
-  reminder.time = Date.now() + minutes * 60_000;
-  reminder.content = newContent;
-  await saveReminders(guildId);
+  const ms = parseDuration(newDuration);
+  if (!ms || ms < 10000) {
+    return await message.reply('<:a_2:1415171126560165928> Duration must be at least 10 seconds.');
+  }
 
-  return await message.reply(`<a:y1:1415173658237866025> Reminder \`${id}\` updated: in ${minutes} minutes → ${newContent}`);
+  reminder.text = newText;
+  reminder.timestamp = Date.now() + ms;
+
+  await message.reply(
+    `<a:y1:1415173658237866025> Reminder \`${reminderId}\` updated! I'll remind you in <t:${Math.floor(reminder.timestamp / 1000)}:R>.`
+  );
+
+  setTimeout(async () => {
+    try {
+      await message.author.send(`<:a_2:1415171126560165928> Reminder: ${reminder.text}`);
+      removeReminder(message.guild.id, reminderId);
+    } catch (err) {
+      console.error('Failed to DM reminder:', err);
+    }
+  }, ms);
+  break;
 }
 case 'remindlist': {
-  const arr = getGuildReminders(guildId).filter(r => r.userId === message.author.id);
-
-  if (!arr.length) {
-    return await message.reply('You have no active reminders.');
+  const list = getGuildReminders(message.guild.id).filter(r => r.userId === message.author.id);
+  if (list.length === 0) {
+    return await message.reply('<:a_2:1415171126560165928> You have no active reminders.');
   }
 
   const embed = new EmbedBuilder()
     .setColor(0xFFFFFF)
-    .setTitle(`${message.author.username}'s Reminders`)
-    .setFooter({ text: `Requested by ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+    .setTitle(`${message.author.username}'s Active Reminders`)
+    .setDescription(
+      list.map(r => `• **${r.id}** — ${r.text} *(<t:${Math.floor(r.timestamp / 1000)}:R>)*`).join('\n')
+    )
     .setTimestamp();
 
-  arr.forEach(r => {
-    embed.addFields({
-      name: `ID: ${r.id}`,
-      value: `⏰ <t:${Math.floor(r.time / 1000)}:R>\n${r.content}`,
-      inline: false
-    });
-  });
-
-  return await message.reply({ embeds: [embed] });
+  await message.reply({ embeds: [embed] });
+  break;
 }
 
       case 'voidcase':
@@ -3818,93 +3802,94 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   case 'remindme':
   case 'remind': {
-        const timeInput = args.shift();
-        const reminderText = args.join(' ');
+      const duration = options.getString('duration');
+      const text = options.getString('text');
 
-      if (!timeInput || !reminderText) {
-        return await interaction.reply('⚠️ Usage: `!remindme <duration> <message>`\nExample: `!remindme 10m Take a break`');
+      const ms = parseDuration(duration);
+      if (!ms || ms < 10000) {
+        return await interaction.reply({ content: 'Duration must be at least 10 seconds.', flags: 64 });
       }
 
-        const delayMs = parseDuration(timeInput);
-      if (!delayMs || delayMs < 1000) {
-        return await interaction.reply('⚠️ Invalid time format. Use formats like `10m`, `1h`, `2d`, `1w`, etc.');
-      }
+      const reminderId = Math.random().toString(36).slice(2, 8);
+      const remindTime = Date.now() + ms;
 
-      const remindAt = Date.now() + delayMs;
+      const reminder = { id: reminderId, userId: user.id, text, timestamp: remindTime };
+      addReminder(guild.id, reminder);
 
-      if (!reminders.has(interaction.guild.id)) reminders.set(interaction.guild.id, []);
-        const guildReminders = reminders.get(interaction.guild.id);
-      guildReminders.push({
-      userId: interaction.author.id,
-      guildId: interaction.guild.id,
-      message: reminderText,
-      time: remindAt,
+      await interaction.reply({
+        content: `<a:y1:1415173658237866025> Reminder set! I'll remind you in <t:${Math.floor(remindTime / 1000)}:R>.\n**ID:** \`${reminderId}\``,
+        flags: 64
       });
 
-    await saveRemindersToFile(interaction.guild.id);
-
-  const when = `<t:${Math.floor(remindAt / 1000)}:R>`;
-  await interaction.reply(`✅ Got it! I'll remind you **${when}** about: "${reminderText}"`);
-  break;
-}
+      setTimeout(async () => {
+        try {
+          await user.send(`<:a_2:1415171126560165928> Reminder: ${text}`);
+          removeReminder(guild.id, reminderId);
+        } catch (err) {
+          console.error('Failed to DM reminder:', err);
+        }
+      }, ms);
+      break;
+    }
 
 
 case 'reminddel': {
-  const id = interaction.options.getString('id');
-  let arr = getGuildReminders(interaction.guildId);
-
-  const before = arr.length;
-  arr = arr.filter(r => !(r.id === id && r.userId === interaction.user.id));
-  reminders.set(interaction.guildId, arr);
-  await saveReminders(interaction.guildId);
-
-  if (arr.length === before) {
-    return await interaction.reply({ content: '❌ No reminder found with that ID (or it’s not yours).', flags: 64 });
-  } else {
-    return await interaction.reply({ content: `✅ Reminder \`${id}\` deleted.`, flags: 64 });
-  }
-}
+      const reminderId = options.getString('id');
+      const list = getGuildReminders(guild.id);
+      const reminder = list.find(r => r.id === reminderId && r.userId === user.id);
+      if (!reminder) {
+        return await interaction.reply({ content: 'Reminder not found.', flags: 64 });
+      }
+      removeReminder(guild.id, reminderId);
+      await interaction.reply({ content: `Reminder \`${reminderId}\` deleted.`, flags: 64 });
+      break;
+    }
 case 'remindchange': {
-  const id = interaction.options.getString('id');
-  const minutes = interaction.options.getInteger('time');
-  const newContent = interaction.options.getString('content');
+      const reminderId = options.getString('id');
+      const newDuration = options.getString('duration');
+      const newText = options.getString('text');
 
-  const arr = getGuildReminders(interaction.guildId);
-  const reminder = arr.find(r => r.id === id && r.userId === interaction.user.id);
+      const list = getGuildReminders(guild.id);
+      const reminder = list.find(r => r.id === reminderId && r.userId === user.id);
+      if (!reminder) {
+        return await interaction.reply({ content: 'Reminder not found.', flags: 64 });
+      }
 
-  if (!reminder) {
-    return await interaction.reply({ content: '❌ No reminder found with that ID (or it’s not yours).', flags: 64 });
-  }
+      const ms = parseDuration(newDuration);
+      if (!ms || ms < 10000) {
+        return await interaction.reply({ content: 'Duration must be at least 10 seconds.', flags: 64 });
+      }
 
-  reminder.time = Date.now() + minutes * 60_000;
-  reminder.content = newContent;
-  await saveReminders(interaction.guildId);
+      reminder.text = newText;
+      reminder.timestamp = Date.now() + ms;
 
-  return await interaction.reply({ content: `✅ Reminder \`${id}\` updated: in ${minutes} minutes → ${newContent}`, flags: 64 });
-}
+      await interaction.reply({
+        content: `Reminder \`${reminderId}\` updated! I'll remind you in <t:${Math.floor(reminder.timestamp / 1000)}:R>.`,
+        flags: 64
+      });
+
+      setTimeout(async () => {
+        try {
+          await user.send(`<:a_2:1415171126560165928> Reminder: ${reminder.text}`);
+          removeReminder(guild.id, reminderId);
+        } catch (err) {
+          console.error('Failed to DM reminder:', err);
+        }
+      }, ms);
+      break;
+    }
 case 'remindlist': {
-  const arr = getGuildReminders(interaction.guildId).filter(r => r.userId === interaction.user.id);
+      const list = getGuildReminders(guild.id).filter(r => r.userId === user.id);
+      if (list.length === 0) {
+        return await interaction.reply({ content: 'You have no active reminders.', flags: 64 });
+      }
 
-  if (!arr.length) {
-    return await interaction.reply({ content: 'You have no active reminders.', flags: 64 });
-  }
+      const desc = list.map(r => `• **${r.id}** — ${r.text} *(<t:${Math.floor(r.timestamp / 1000)}:R>)*`).join('\n');
+      const embed = new EmbedBuilder().setColor(0xFFFFFF).setTitle(`${user.username}'s Active Reminders`).setDescription(desc).setTimestamp();
 
-  const embed = new EmbedBuilder()
-    .setColor(0xFFFFFF)
-    .setTitle(`${interaction.user.username}'s Reminders`)
-    .setFooter({ text: `Requested by ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-    .setTimestamp();
-
-  arr.forEach(r => {
-    embed.addFields({
-      name: `ID: ${r.id}`,
-      value: `⏰ <t:${Math.floor(r.time / 1000)}:R>\n${r.content}`,
-      inline: false
-    });
-  });
-
-  return await interaction.reply({ embeds: [embed], flags: 64 });
-}
+      await interaction.reply({ embeds: [embed], flags: 64 });
+      break;
+    }
 
 
       case 'debug': {
@@ -6473,7 +6458,6 @@ setInterval(async () => {
       }
       const newArr = arr.filter(r => r.time > now);
       reminders.set(guildId, newArr);
-      await saveReminders(guildId);
     }
   }
 }, 30_000);
