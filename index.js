@@ -6167,7 +6167,7 @@ new SlashCommandBuilder()
   .addStringOption(opt =>
   opt.setName('time')
      .setDescription('Duration (e.g. 10m, 1h, 2d). Accepts s/m/h/d/w/mo/y / deletes messages from the time stated')
-     .setRequired(true))
+     .setRequired(true)),
 
 
 new SlashCommandBuilder()
