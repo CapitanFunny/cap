@@ -1597,7 +1597,7 @@ if (cooldownCheck.onCooldown) {
 // Prefix Command Handler 4/10
 // ============================================================================
 
-await safeReactDuringCommand(message, '<a:loadingstate:1222370057514909767>', async () => {
+await safeReactDuringCommand(message, '<a:load:1431450912890683442>', async () => {
 switch (commandName) {
 case 'membercount': {
   const guild = message.guild;
