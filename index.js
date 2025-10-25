@@ -196,7 +196,7 @@ async function loadCasesFromFile(guildId = null) {
           console.error(`Error loading cases for guild ${gid}:`, err);
         }
       }
-      console.log(`Loaded ${moderationCases.size} total cases from guild folders`);
+      console.log(`Cases Loaded; ${moderationCases.size}g`);
     } catch (err) {
       console.error('Error loading cases from file main file:', err);
     }
@@ -321,7 +321,7 @@ async function loadServerLoggingChannels() {
         console.error(`Error loading server logging channels for guild ${gid}:`, err);
       }
     }
-    console.log(`Loaded logging channels for ${serverLoggingChannels.size} guilds`);
+    console.log(`Loaded logging channels; ${serverLoggingChannels.size}g`);
   } catch (err) {
     console.error('Error loading server logging channels from file:', err);
   }
@@ -1097,7 +1097,7 @@ async function loadImmunes() {
         console.error(`Error loading immunes for guild ${gid}:`, err);
       }
     }
-    console.log(`Loaded immunes for ${serverImmunes.size} guilds`);
+    console.log(`Loaded immunes; ${serverImmunes.size}g`);
   } catch (err) {
     console.error('Error loading immunes:', err);
   }
@@ -3040,9 +3040,9 @@ case 'commands': {
   const editLatency = Date.now() - editStart;
   await sent.edit(
     `Pong!\n` +
-    `• Raw response time: **${rawLatency}ms**\n` +
-    `• Edit roundtrip: **${editLatency}ms**\n` +
-    `• WebSocket ping: **${Math.round(client.ws.ping)}ms**`
+    `> • Raw response time: **${rawLatency}ms**\n` +
+    `> • Edit roundtrip: **${editLatency}ms**\n` +
+    `> • WebSocket ping: **${Math.round(client.ws.ping)}ms**`
   );
   break;
 }
@@ -3067,12 +3067,12 @@ case 'commands': {
       .setColor(0xFFFFFF)
       .setTitle('Bot Status — Live Check')
       .addFields(
-        { name: 'Uptime', value: uptimePretty, inline: true },
-        { name: 'Guilds', value: `${client.guilds.cache.size}`, inline: true },
-        { name: 'Users (cached total)', value: `${totalUsers}`, inline: true },
-        { name: 'WebSocket Ping', value: `${Math.round(client.ws.ping)}ms`, inline: true },
-        { name: 'Memory (RSS)', value: `${memMb} MB`, inline: true },
-        { name: 'Node.js', value: process.version, inline: true }
+        { name: 'Uptime', value: uptimePretty, inline: false },
+        { name: 'Guilds', value: `${client.guilds.cache.size}`, inline: false },
+        { name: 'Users (cached total)', value: `${totalUsers}`, inline: false },
+        { name: 'WebSocket Ping', value: `${Math.round(client.ws.ping)}ms`, inline: false },
+        { name: 'Memory (RSS)', value: `${memMb} MB`, inline: false },
+        { name: 'Node.js', value: process.version, inline: false }
       )
       .setTimestamp()
       .setFooter({ text: `Bot: ${client.user ? client.user.tag : 'unknown'}` });
@@ -3088,7 +3088,7 @@ case 'commands': {
 }
         
         case 'support':
-        const supportReply = await message.reply('***Support Server for cap***\n\n> https://discord.gg/PfCC7Y2tXH\n\n***Website***\n\n> https://sites.google.com/view/capitanfunny/discord-bot-developer?authuser=0');
+        const supportReply = await message.reply('***Support Server for cap***\n\n> https://discord.gg/PfCC7Y2tXH\n\n***Website***\n\n> <https://sites.google.com/view/capitanfunny/discord-bot-developer?authuser=0>');
         break;
 
       case 'appeal':
@@ -4200,9 +4200,9 @@ const embed = new EmbedBuilder()
 
     await interaction.editReply(
       `Pong!\n` +
-      `• Raw response time: **${rawLatency}ms**\n` +
-      `• Edit roundtrip: **${editLatency}ms**\n` +
-      `• WebSocket ping: **${Math.round(client.ws.ping)}ms**`
+      `> • Raw response time: **${rawLatency}ms**\n` +
+      `> • Edit roundtrip: **${editLatency}ms**\n` +
+      `> • WebSocket ping: **${Math.round(client.ws.ping)}ms**`
     );
   } catch (err) {
     console.error('Ping interaction failed:', err);
@@ -4269,12 +4269,12 @@ const embed = new EmbedBuilder()
       .setColor(0xFFFFFF)
       .setTitle('Bot Status — Live Check')
       .addFields(
-        { name: 'Uptime', value: uptimePretty, inline: true },
-        { name: 'Guilds', value: `${client.guilds.cache.size}`, inline: true },
-        { name: 'Users (cached total)', value: `${totalUsers}`, inline: true },
-        { name: 'WebSocket Ping', value: `${Math.round(client.ws.ping)}ms`, inline: true },
-        { name: 'Memory (RSS)', value: `${memMb} MB`, inline: true },
-        { name: 'Node.js', value: process.version, inline: true }
+        { name: 'Uptime', value: uptimePretty, inline: false },
+        { name: 'Guilds', value: `${client.guilds.cache.size}`, inline: false },
+        { name: 'Users (cached total)', value: `${totalUsers}`, inline: false },
+        { name: 'WebSocket Ping', value: `${Math.round(client.ws.ping)}ms`, inline: false },
+        { name: 'Memory (RSS)', value: `${memMb} MB`, inline: false },
+        { name: 'Node.js', value: process.version, inline: false }
       )
       .setTimestamp()
       .setFooter({ text: `Bot: ${client.user ? client.user.tag : 'unknown'}` });
