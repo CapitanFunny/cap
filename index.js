@@ -5,6 +5,7 @@
 const {
   Client,
   GatewayIntentBits,
+  ActivityType,
   Events,
   REST,
   Routes,
@@ -6379,14 +6380,14 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.log(`✅ Logged in as ${readyClient.user.tag}`);
 
     client.user.setPresence({
-      activities: [
-       {
-          name: 'moderating at peak efficiency.',
-         type: Discord.ActivityType.Custom
-       }
-      ],
-      status: 'online'
-    });
+    activities: [
+      {
+        name: 'moderating at peak efficency.',
+        type: ActivityType.Custom
+      }
+    ],
+    status: 'online'
+  });
 
     await migrateOldRootFiles();
     await loadCasesFromFile();
