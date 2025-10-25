@@ -1534,6 +1534,49 @@ if (afkUsers.has(message.guild.id) && afkUsers.get(message.guild.id).has(message
     }
   }
 
+  async function safeReactDuringCommand(message, emojiIdentifier, fn) {
+  const ch = message.channel;
+  const perms = ch.permissionsFor ? ch.permissionsFor(client.user) : null;
+  let addedReaction = null;
+  const canAddReactions = perms?.has(PermissionsBitField.Flags.AddReactions) || perms?.has('AddReactions');
+  const canUseExternal = perms?.has(PermissionsBitField.Flags.UseExternalEmojis) || perms?.has('UseExternalEmojis');
+
+  if (canAddReactions) {
+    try {
+      let reactArg = null;
+      if (/^\d{16,}$/.test(String(emojiIdentifier))) {
+        reactArg = client.emojis.cache.get(emojiIdentifier) || message.guild?.emojis?.cache.get(emojiIdentifier);
+        if (reactArg && reactArg.animated && reactArg.guildId && reactArg.guildId !== message.guild?.id && !canUseExternal) {
+          reactArg = null;
+        }
+      } else {
+        reactArg = emojiIdentifier;
+      }
+
+      if (reactArg) {
+        try {
+          addedReaction = await message.react(reactArg);
+        } catch (e) {
+          addedReaction = null;
+        }
+      }
+    } catch (e) {
+      addedReaction = null;
+    }
+  }
+
+  try {
+    return await fn();
+  } finally {
+    try {
+      if (addedReaction) {
+        await addedReaction.users.remove(client.user.id).catch(() => {});
+      }
+    } catch (e) {}
+  }
+}
+
+
   if (!message.content.startsWith(prefix)) return;
 
   const args = message.content.slice(prefix.length).trim().split(/\s+/);
@@ -1554,6 +1597,7 @@ if (cooldownCheck.onCooldown) {
 // Prefix Command Handler 4/10
 // ============================================================================
 
+await safeReactDuringCommand(message, '<a:loadingstate:1222370057514909767>', async () => {
 switch (commandName) {
 case 'membercount': {
   const guild = message.guild;
@@ -3284,11 +3328,14 @@ case 'setproof': {
   break;
 
     }
+
+    });
   } catch (error) {
     console.error('Prefix command error:', error);
     await message.reply('<:a_2:1415171126560165928> An error occurred while executing this command.');
   }
 });
+
 
 // ============================================================================
 // Slash Command Handler 6/10
