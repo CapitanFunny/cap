@@ -6382,7 +6382,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     client.user.setPresence({
     activities: [
       {
-        name: 'moderating at peak efficency.',
+        name: 'discord.gg/PfCC7Y2tXH',
         type: ActivityType.Custom
       }
     ],
@@ -6435,16 +6435,11 @@ client.once(Events.ClientReady, async (readyClient) => {
 **After *a brief debug testing session*, no errors have been found.**
 
 ## Updates;
-- minor bug fixes
-remind commands are fixed, added new time system;
-1m for 1 minute
-1h for 1 hour
-1d for 1 day
-etc...
+- added custom status updates!
 
 ## Coming Soon;
-- New Ticketing system
-- Advanced Custom Automod 
+- New Ticketing system    --> VERY SOON
+- Advanced Custom Automod --> VERY SOON
 
 If you find an error, please open a <#1376450603068166165> ticket.
 Date of last startup: <t:${Math.floor(Date.now() / 1000)}:F>
