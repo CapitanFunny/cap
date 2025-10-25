@@ -6377,6 +6377,17 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 // ============================================================================
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`✅ Logged in as ${readyClient.user.tag}`);
+
+    client.user.setPresence({
+      activities: [
+       {
+          name: 'moderating at peak efficiency.',
+         type: Discord.ActivityType.Custom
+       }
+      ],
+      status: 'online'
+    });
+
     await migrateOldRootFiles();
     await loadCasesFromFile();
     await loadServerPrefixes();
