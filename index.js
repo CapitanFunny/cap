@@ -4534,7 +4534,7 @@ case 'infract': {
 case 'schedulemsg':
 case 'schedule': {
   const channel = interaction.options.getChannel('channel');
-  const newTimeStr = interaction.options.getString('time'); // or 'duration'
+  const newTimeStr = interaction.options.getString('time');
 const ms = parseDuration(newTimeStr);
 if (!ms || ms < 1000) {
   return await interaction.reply({ content: '⚠️ Invalid duration. Use `10m`, `1h`, etc.', flags: 64 });
@@ -6506,7 +6506,6 @@ function startReminderWorker() {
     try {
       const now = Date.now();
       for (const [guildId, list] of Array.from(reminders.entries())) {
-        // iterate over a copy to avoid mutation issues
         for (const rem of [...list]) {
           if (!rem || !rem.timestamp) continue;
           if (rem.timestamp <= now) {
@@ -6518,7 +6517,6 @@ function startReminderWorker() {
             } catch (err) {
               console.error('Reminder delivery error:', err);
             }
-            // remove it whether send succeeded or not
             removeReminder(guildId, rem.id);
           }
         }
