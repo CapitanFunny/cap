@@ -6484,18 +6484,6 @@ client.once(Events.ClientReady, async (readyClient) => {
 
           setBotPresence();
   
-      client.user.setBotPresence({
-        activities: [
-          {
-            name: 'discord.gg/PfCC7Y2tXH',
-            type: ActivityType.Custom
-          }
-        ],
-        status: 'online'
-      });
-
-
-
     await migrateOldRootFiles();
     await loadCasesFromFile();
     await loadServerPrefixes();
