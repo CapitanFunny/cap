@@ -6440,7 +6440,7 @@ client.on(Events.GuildCreate, async (guild) => {
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`✅ Logged in as ${readyClient.user.tag}`);
 
-      client.user.setBotPresence({
+      client.user.setPresence({
         activities: [
           {
             name: 'discord.gg/PfCC7Y2tXH',
