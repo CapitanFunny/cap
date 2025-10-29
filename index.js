@@ -6482,6 +6482,8 @@ client.on(Events.GuildCreate, async (guild) => {
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`✅ Logged in as ${readyClient.user.tag}`);
 
+          setBotPresence();
+  
       client.user.setBotPresence({
         activities: [
           {
