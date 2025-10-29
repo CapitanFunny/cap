@@ -6420,6 +6420,20 @@ new SlashCommandBuilder()
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
+
+client.on(Events.GuildCreate, async (guild) => {
+  try {
+    console.log(`🟢 Joined guild: ${guild.name} (${guild.id}) — registering guild commands...`);
+    await rest.put(
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id),
+      { body: guildCommands }
+    );
+    console.log(`✅ Registered guild commands for ${guild.name} (${guild.id}).`);
+  } catch (err) {
+    console.error(`❌ Failed to register guild commands for ${guild.name} (${guild.id}):`, err);
+  }
+});
+
 // ============================================================================
 // Consolidated ClientReady Event
 // ============================================================================
@@ -6429,7 +6443,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     function setBotPresence() {
   try {
     if (!client || !client.user) return;
-    client.user.setBotPresence({
+    client.user.setPresence({
       activities: [
         {
           name: 'discord.gg/PfCC7Y2tXH',
