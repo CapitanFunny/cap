@@ -1182,6 +1182,48 @@ function isMemberImmune(guild, member, punishment) {
   return false;
 }
 
+
+function setBotPresence() {
+  try {
+    if (!client || !client.user) return;
+    client.user.setPresence({
+      activities: [
+        {
+          name: 'discord.gg/PfCC7Y2tXH',
+          type: ActivityType.Custom
+        }
+      ],
+      status: 'online'
+    }).catch(err => {
+      console.warn('Failed to set presence:', err);
+    });
+  } catch (err) {
+    console.warn('setBotPresence error:', err);
+  }
+}
+
+client.on(Events.ClientReady, () => setBotPresence());
+client.on('shardResume', () => setBotPresence());
+client.on('shardReconnecting', () => setBotPresence());
+
+const PRESENCE_REAPPLY_INTERVAL_MS = 1000 * 60 * 60 * 6;
+setInterval(() => {
+  try {
+    if (client && client.user && typeof client.isReady === 'function' && client.isReady()) {
+      setBotPresence();
+    }
+  } catch (err) {
+    console.warn('Presence reapply error:', err);
+  }
+}, PRESENCE_REAPPLY_INTERVAL_MS);
+
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException', err);
+});
+process.on('unhandledRejection', (reason, p) => {
+  console.error('unhandledRejection at:', p, 'reason:', reason);
+});
+
 async function removeUserAFK(member) {
   const guildAfkUsers = afkUsers.get(member.guild.id);
   if (!guildAfkUsers || !guildAfkUsers.has(member.id)) return false;
@@ -6440,7 +6482,7 @@ client.on(Events.GuildCreate, async (guild) => {
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`✅ Logged in as ${readyClient.user.tag}`);
 
-      client.user.setPresence({
+      client.user.setBotPresence({
         activities: [
           {
             name: 'discord.gg/PfCC7Y2tXH',
